@@ -1,0 +1,222 @@
+@import "tailwindcss";
+
+/* Class-based dark mode for Tailwind v4 */
+@variant dark (&:where(.dark.dark *));
+
+:root {
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+}
+
+html.dark {
+  color-scheme: dark;
+  --background: #111111;
+  --foreground: #f0f0f0;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Pointer cursor on all interactive elements */
+button:not(:disabled),
+a,
+[role="button"],
+select,
+label[for] {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* iOS Safari zooms the viewport whenever a focused control's text is under
+   16px, which this UI's text-xs/text-sm fields would trigger on every tap.
+   Scoped below the sm breakpoint so desktop keeps its denser type. */
+@media (max-width: 639px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d1d1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #b0b0b0; }
+
+/* ── Dark mode overrides ─────────────────────────────────────────────────────
+   Rules outside @layer have higher precedence than Tailwind's @layer utilities,
+   so these automatically cascade over every hardcoded Tailwind class app-wide.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Scrollbar */
+html.dark ::-webkit-scrollbar-thumb { background: #3a3a3a; }
+html.dark ::-webkit-scrollbar-thumb:hover { background: #555555; }
+
+/* ── Backgrounds ── */
+html.dark .bg-white            { background-color: #111111; }
+html.dark .bg-\[\#fafafa\]     { background-color: #171717; }
+html.dark .bg-\[\#f5f5f5\]     { background-color: #222222; }
+html.dark .bg-\[\#f4f4f4\]     { background-color: #1e1e1e; }
+html.dark .bg-\[\#f8f8f8\]     { background-color: #1c1c1c; }
+html.dark .bg-\[\#f0f0f0\]     { background-color: #262626; }
+html.dark .bg-\[\#f1f1f1\]     { background-color: #222222; }
+html.dark .bg-\[\#fef2f2\]     { background-color: #2d1515; }
+html.dark .bg-\[\#f0fdf4\]     { background-color: #0f2318; }
+html.dark .bg-\[\#eff6ff\]     { background-color: #0f1a2d; }
+html.dark .bg-\[\#fefce8\]     { background-color: #1f1a0d; }
+/* Lead pipeline stage pills (lib/leads-constants.ts), violet/orange/cyan
+   tints that had no dark counterpart, so the stage pill rendered as a light
+   block in dark mode. */
+html.dark .bg-\[\#f3e8ff\]     { background-color: #231831; }
+html.dark .bg-\[\#fff7e6\]     { background-color: #2a1e0c; }
+html.dark .bg-\[\#ecfeff\]     { background-color: #0c2226; }
+/* "Main contact" on Quick Access vendor cards (amber), and the Vault's
+   outside-link status pills, so neither renders as a light block. */
+html.dark .bg-\[\#fffbeb\]     { background-color: #1f1a0d; }
+html.dark .bg-\[\#fef3c7\]     { background-color: #33270b; }
+html.dark .border-\[\#fde68a\] { border-color: #4a3a10; }
+html.dark .border-\[\#fcd34d\] { border-color: #6b5214; }
+html.dark .text-\[\#92400e\]   { color: #fcd34d; }
+html.dark .text-\[\#15803d\]   { color: #4ade80; }
+html.dark .text-\[\#b91c1c\]   { color: #f87171; }
+html.dark .border-\[\#fecdd3\] { border-color: #7f1d1d; }
+
+/* ── Borders ── */
+html.dark .border-\[\#eaeaea\]  { border-color: #2e2e2e; }
+html.dark .border-\[\#f4f4f4\]  { border-color: #252525; }
+html.dark .border-\[\#f5f5f5\]  { border-color: #282828; }
+html.dark .border-\[\#d4d4d4\]  { border-color: #3a3a3a; }
+html.dark .border-\[\#f0f0f0\]  { border-color: #2a2a2a; }
+html.dark .border-\[\#e5e5e5\]  { border-color: #2e2e2e; }
+html.dark .border-\[\#fecaca\]  { border-color: #7f1d1d; }
+html.dark .border-\[\#bbf7d0\]  { border-color: #14532d; }
+
+/* ── Divide colors ── */
+html.dark .divide-\[\#f8f8f8\] > :not([hidden]) ~ :not([hidden]) { border-color: #1e1e1e; }
+html.dark .divide-\[\#f4f4f4\] > :not([hidden]) ~ :not([hidden]) { border-color: #252525; }
+html.dark .divide-\[\#eaeaea\] > :not([hidden]) ~ :not([hidden]) { border-color: #2e2e2e; }
+
+/* ── Text ── */
+html.dark .text-\[\#0a0a0a\]   { color: #f0f0f0; }
+html.dark .text-\[\#111\]      { color: #f0f0f0; }
+html.dark .text-\[\#333\]      { color: #d0d0d0; }
+html.dark .text-\[\#444\]      { color: #cccccc; }
+html.dark .text-\[\#666\]      { color: #a0a0a0; }
+html.dark .text-\[\#777\]      { color: #909090; }
+html.dark .text-\[\#888\]      { color: #8a8a8a; }
+html.dark .text-\[\#999\]      { color: #717171; }
+html.dark .text-\[\#aaa\]      { color: #646464; }
+html.dark .text-\[\#bbb\]      { color: #5a5a5a; }
+html.dark .text-\[\#ccc\]      { color: #494949; }
+
+/* ── Tooltip backgrounds (dark tooltip blends into dark body) ── */
+html.dark .bg-\[\#111\]        { background-color: #303030; }
+
+/* ── Primary action buttons: flip dark→light so they're visible on dark bg ──
+   Exclude [data-toggle] buttons which have their own dark-mode logic below.  */
+html.dark button.bg-\[\#0a0a0a\]:not([data-toggle])            { background-color: #efefef; color: #111111; }
+html.dark button.bg-\[\#0a0a0a\]:not([data-toggle]):hover:not(:disabled) { background-color: #d5d5d5; }
+html.dark button.bg-\[\#0a0a0a\]:not([data-toggle]):disabled   { background-color: #282828; color: #555555; }
+/* Same for a link styled as the primary action (Quick Access "Call"). */
+html.dark a.bg-\[\#0a0a0a\]       { background-color: #efefef; color: #111111; }
+html.dark a.bg-\[\#0a0a0a\]:hover { background-color: #d5d5d5; }
+
+/* ── Toggle switch track: keep semantic meaning in dark mode ── */
+html.dark button[data-toggle].bg-\[\#0a0a0a\] { background-color: #d4d4d4; }  /* "on"  */
+html.dark button[data-toggle].bg-\[\#e0e0e0\] { background-color: #2e2e2e; }  /* "off" */
+
+/* ── Form inputs / selects / textareas ── */
+html.dark input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+html.dark select,
+html.dark textarea {
+  background-color: #1a1a1a;
+  color: #f0f0f0;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #555555;
+}
+
+/* Focus ring stays visible */
+html.dark input:focus,
+html.dark select:focus,
+html.dark textarea:focus {
+  border-color: #666666;
+}
+
+/* ── DateTimePicker popover ── */
+html.dark .bg-\[\#f5f5f5\].border.rounded-lg { background-color: #2a2a2a; color: #f0f0f0; }
+html.dark .shadow-xl { box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+
+/* ── Tooltip (components/ui/TooltipLayer.tsx) ───────────────────────────────
+   One bubble for the whole app, moved and filled imperatively. Only the bits
+   that can't be Tailwind classes live here: the fixed positioning it is
+   placed with, the fade, and an arrow that flips with the bubble.
+   The #111 background is in the dark-mode list above, so it lifts to #303030
+   against a dark body instead of disappearing into it.
+   ─────────────────────────────────────────────────────────────────────────── */
+.tooltip-bubble {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity .12s ease, transform .12s ease;
+  /* Hidden from hit-testing and from screen readers until it says something,
+     so an empty bubble is never announced. */
+  visibility: hidden;
+}
+
+.tooltip-bubble[data-open="true"] {
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
+}
+
+.tooltip-arrow {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  transform: rotate(45deg);
+  border-radius: 1px;
+}
+
+.tooltip-bubble[data-side="top"] .tooltip-arrow    { bottom: -3px; }
+.tooltip-bubble[data-side="bottom"] .tooltip-arrow { top: -3px; }
+
+/* The toast's entrance (lib/toast.tsx). A short slide from the right rather
+   than a fade, so something arriving at the edge of vision registers as
+   arriving. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}

@@ -1,0 +1,573 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import DateTimePicker from "@/components/ui/DateTimePicker";
+import { useRouter } from "next/navigation";
+import Drawer from "@/components/ui/Drawer";
+import FormField, { inputClass } from "@/components/ui/FormField";
+import Select from "@/components/ui/Select";
+import { updateEmployee, updateEmployeeAccess, removeEmployee } from "@/lib/db/employees";
+import { logActivity } from "@/lib/activity-log";
+import { NAV_PAGES } from "@/lib/nav-pages";
+import { defaultPageOptions, optionsForPage, PAGE_OPTIONS } from "@/lib/page-options";
+import { availableWidgets, defaultDashboardWidgets, isGrantOnly } from "@/lib/dashboard-widgets";
+import { Check, Lock, Mail } from "lucide-react";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { getErrorMessage } from "@/lib/utils";
+import { useToast } from "@/lib/toast";
+import { useAuth } from "@/lib/auth-context";
+import type { Employee, EmployeeStatus, AccessRole } from "@/lib/mock-data";
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  employee: Employee;
+}
+
+const PAGE_SECTIONS = Array.from(new Set(NAV_PAGES.map((p) => p.section)));
+
+export default function EditEmployeeDrawer({ open, onClose, employee }: Props) {
+  const router = useRouter();
+  const { authUser } = useAuth();
+  const isAdmin = authUser?.isAdmin ?? false;
+  const [form, setForm] = useState({
+    name:       employee.name,
+    email:      employee.email,
+    phone:      employee.phone ?? "",
+    role:       employee.role,
+    accessRole: (employee.accessRole ?? "Contributor") as AccessRole,
+    status:     employee.status,
+    location:   employee.location,
+    startDate:  employee.startDate,
+  });
+  const [access, setAccess] = useState<string[]>([]);
+  const [dashboard, setDashboard] = useState<string[]>([]);
+  // Grants inside a page they hold - see lib/page-options.ts.
+  const [pageOptions, setPageOptions] = useState<string[]>([]);
+  const [errors, setErrors] = useState<Partial<Record<keyof typeof form, string>>>({});
+  const [saving, setSaving]           = useState(false);
+  const [saveError, setSaveError]     = useState("");
+  const [inviting, setInviting]       = useState(false);
+  const { success, error: notifyError } = useToast();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting]       = useState(false);
+  const errorRef = useRef<HTMLDivElement>(null);
+
+  // The form is long (Page Access alone can run past a screen's height), and
+  // the Save button lives in a fixed footer, so a validation or save error
+  // can land off-screen above the fold, looking like the click did nothing.
+  useEffect(() => {
+    if (saveError || Object.keys(errors).length > 0) {
+      errorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [saveError, errors]);
+
+  // Keyed on [open, employee.id] rather than the whole `employee` object:
+  // that object comes from a live Supabase subscription in the parent page
+  // and gets a brand-new reference on every unrelated background refetch
+  // (including the reconnect a browser tab does when it regains focus after
+  // being backgrounded). Depending on the whole object meant any of those
+  // incidental updates would silently wipe whatever the admin was mid-typing.
+  // Re-hydrating only when the drawer opens or switches to a different
+  // employee is the actual intent here.
+  useEffect(() => {
+    if (!open) return;
+    setForm({
+      name:       employee.name,
+      email:      employee.email,
+      phone:      employee.phone ?? "",
+      role:       employee.role,
+      accessRole: (employee.accessRole ?? "Contributor") as AccessRole,
+      status:     employee.status,
+      location:   employee.location,
+      startDate:  employee.startDate,
+    });
+    setErrors({});
+    setAccess(employee.access ?? []);
+    setDashboard(employee.dashboard ?? defaultDashboardWidgets(employee.access));
+    setPageOptions(
+      employee.pageOptions ?? defaultPageOptions(employee.accessRole === "Administrator"),
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, employee.id]);
+
+  function set(field: keyof typeof form, value: string) {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
+    if (saveError) setSaveError("");
+  }
+
+  function togglePage(href: string) {
+    setAccess((prev) =>
+      prev.includes(href) ? prev.filter((h) => h !== href) : [...prev, href]
+    );
+  }
+
+  function validate() {
+    const errs: Partial<Record<keyof typeof form, string>> = {};
+    if (!form.name.trim())     errs.name     = "Name is required";
+    if (!form.email.trim())    errs.email    = "Email is required";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = "Invalid email";
+    if (!form.role.trim())     errs.role     = "Role is required";
+    if (!form.location.trim()) errs.location = "Location is required";
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
+
+  /**
+   * Creates the login if it doesn't exist yet and emails a link to set a
+   * password. Admin-only, and the route checks that too: the UI hiding a
+   * button has never been a permission.
+   */
+  // Which panels are even offerable, from the page grants as they stand in
+  // this form rather than as they were saved: ticking Leads should make the
+  // leads panels appear without saving first.
+  const offerable = availableWidgets(access);
+
+  async function sendInvite() {
+    setInviting(true);
+    try {
+      const res = await fetch("/api/auth/password-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.email.trim(), kind: "invite" }),
+      });
+      const body = (await res.json()) as { ok?: boolean; created?: boolean; error?: string };
+      if (!res.ok) throw new Error(body.error ?? "Couldn't send the link");
+      success(
+        body.created
+          ? `Login created. ${form.email.trim()} can set a password from the link.`
+          : `Sent ${form.email.trim()} a link to set a new password.`,
+      );
+    } catch (err) {
+      notifyError(getErrorMessage(err, "Couldn't send the sign-in link"));
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function handleSave() {
+    if (!validate()) return;
+    setSaving(true);
+    setSaveError("");
+    const patch: Partial<Employee> = {
+      name:       form.name.trim(),
+      email:      form.email.trim().toLowerCase(),
+      phone:      form.phone.trim(),
+      role:       form.role.trim(),
+      status:     form.status as EmployeeStatus,
+      location:   form.location.trim(),
+      startDate:  form.startDate,
+    };
+    try {
+      await updateEmployee(employee.id, patch);
+      // Access role and page access are permission grants: only admins can
+      // change them, enforced server-side too (see updateEmployeeAccess).
+      if (isAdmin) {
+        await updateEmployeeAccess(employee.id, {
+          access,
+          accessRole: form.accessRole,
+          dashboard,
+          // Dropping a page drops what was granted inside it, so revoking
+          // Customers can't leave a billing grant behind to come back to
+          // life the next time somebody re-grants the page.
+          pageOptions: pageOptions.filter((key) =>
+            PAGE_OPTIONS.some((o) => o.key === key && access.includes(o.page)),
+          ),
+        });
+      }
+    } catch (err) {
+      console.error("[EditEmployeeDrawer] Failed to update:", JSON.stringify(err, Object.getOwnPropertyNames(err ?? {})), err);
+      setSaveError(getErrorMessage(err, "Failed to save. Please try again."));
+      setSaving(false);
+      return;
+    }
+
+    // The database write already succeeded; logging is best-effort, so a
+    // failure here must not be reported as "the save failed" or block the close.
+    // Page-access changes reach the sidebar via auth-context's live Supabase
+    // subscription on the employee row, not a local mirror.
+    try {
+      logActivity({
+        category: "employees",
+        action: "Employee updated",
+        detail: `Updated profile for ${patch.name ?? employee.name}`,
+        metadata: { employeeId: employee.id },
+      });
+    } catch (err) {
+      console.error("[EditEmployeeDrawer] Post-save side effect failed (update itself succeeded):", getErrorMessage(err, String(err)));
+    }
+    setSaving(false);
+    onClose();
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await removeEmployee(employee.id);
+      logActivity({
+        category: "employees",
+        action: "Employee removed",
+        detail: `Removed ${employee.name} (${employee.role})`,
+        metadata: { employeeId: employee.id },
+      });
+      onClose();
+      router.push("/employees");
+    } catch (err) {
+      console.error("[EditEmployeeDrawer] Delete failed:", JSON.stringify(err, Object.getOwnPropertyNames(err ?? {})), err);
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }
+
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      title="Edit Profile"
+      subtitle={`Editing ${employee.name}`}
+      footer={
+        <>
+          <button
+            onClick={onClose}
+            className="border border-[#eaeaea] bg-white text-sm font-medium text-[#444] px-4 py-2 rounded-lg hover:bg-[#fafafa] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-[#0a0a0a] text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-[#333] transition-colors disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div ref={errorRef} />
+        {saveError && (
+          <div className="bg-[#fff5f5] border border-[#fecaca] text-[#dc2626] text-sm px-4 py-3 rounded-lg">
+            {saveError}
+          </div>
+        )}
+
+        <p className="text-[10px] font-semibold text-[#999] uppercase tracking-widest mb-3">Basic Information</p>
+
+        <FormField label="Full Name" required error={errors.name}>
+          <input className={inputClass} value={form.name} onChange={(e) => set("name", e.target.value)} />
+        </FormField>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <FormField label="Email" required error={errors.email}>
+            <input className={inputClass} type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
+          </FormField>
+          <FormField label="Phone" error={errors.phone}>
+            <input className={inputClass} placeholder="+1 (415) 555-0100" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
+          </FormField>
+        </div>
+
+        {isAdmin && (
+          <div className="border-t border-[#f7f7f7] pt-4">
+            <p className="text-[10px] font-semibold text-[#999] uppercase tracking-widest mb-2">Sign-in</p>
+            <div className="flex items-start gap-3 justify-between">
+              <p className="text-[11px] text-[#999] leading-relaxed max-w-xs">
+                {/* The Microsoft button needs a tenant account. Anyone
+                    outside it signs in with an email and a password, which
+                    they set themselves from this link. */}
+                Emails {form.email.trim() || "them"} a link to set a password. For anyone who can&apos;t use the
+                Microsoft button. Sending it again replaces the last link.
+              </p>
+              <button
+                type="button"
+                onClick={sendInvite}
+                disabled={inviting || !form.email.trim()}
+                className="shrink-0 flex items-center gap-1.5 border border-[#eaeaea] bg-white text-[13px] font-medium text-[#0a0a0a] px-3 py-1.5 rounded-lg hover:bg-[#fafafa] transition-colors disabled:opacity-50"
+              >
+                <Mail className="w-3.5 h-3.5" />
+                {inviting ? "Sending…" : "Send sign-in link"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="border-t border-[#f7f7f7] pt-4">
+          <p className="text-[10px] font-semibold text-[#999] uppercase tracking-widest mb-3">Role</p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <FormField label="Job Title / Role" required error={errors.role}>
+            <input className={inputClass} value={form.role} onChange={(e) => set("role", e.target.value)} />
+          </FormField>
+          <FormField label="Status">
+            <Select
+              value={form.status}
+              onChange={(v) => set("status", v)}
+              options={[
+                { value: "active", label: "Active" },
+                { value: "remote", label: "Remote" },
+                { value: "on-leave", label: "On Leave" },
+              ]}
+            />
+          </FormField>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <FormField label="Access Role" hint={isAdmin ? "Workspace permissions" : "Only admins can change this"}>
+            {isAdmin ? (
+              <Select
+                value={form.accessRole}
+                onChange={(v) => set("accessRole", v)}
+                options={[
+                  { value: "Administrator", label: "Administrator: Full access" },
+                  { value: "Manager", label: "Manager: Manage teams & projects" },
+                  { value: "Analyst", label: "Analyst: View & export data" },
+                  { value: "Contributor", label: "Contributor: Add & edit content" },
+                  { value: "Viewer", label: "Viewer: Read only" },
+                ]}
+              />
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-[#666] border border-[#eaeaea] bg-[#fafafa] rounded-lg px-3 py-2">
+                <Lock className="w-3.5 h-3.5 text-[#bbb] shrink-0" />
+                {form.accessRole}
+              </div>
+            )}
+          </FormField>
+          <FormField label="Start Date">
+            <DateTimePicker
+              value={form.startDate}
+              onChange={(v) => set("startDate", v)}
+              dateOnly
+              floating
+              placeholder="Pick a start date"
+            />
+          </FormField>
+        </div>
+
+        <div className="border-t border-[#f7f7f7] pt-4">
+          <p className="text-[10px] font-semibold text-[#999] uppercase tracking-widest mb-3">Location</p>
+        </div>
+
+        <FormField label="Location" required error={errors.location}>
+          <input className={inputClass} value={form.location} onChange={(e) => set("location", e.target.value)} />
+        </FormField>
+
+        <div className="border-t border-[#f7f7f7] pt-4">
+          <p className="text-[10px] font-semibold text-[#999] uppercase tracking-widest mb-1">Dashboard</p>
+          <p className="text-xs text-[#999] mb-3">
+            {/* The dashboard itself isn't grantable: it's where sign-in
+                lands. What's on it is. */}
+            Everyone has the dashboard. These are the panels on it, and only the ones their pages support:
+            tick Leads below and the leads panels appear here.
+            {form.accessRole === "Administrator" &&
+              " An administrator sees all of them bar the clock and the call tally, which are theirs only if you tick them."}
+          </p>
+          <div className="space-y-1.5 mb-4">
+            {offerable.length === 0 && (
+              <p className="text-xs text-[#bbb] px-3 py-2 border border-dashed border-[#eaeaea] rounded-lg">
+                Grant a page below and its panels show up here. Today&apos;s schedule is always on.
+              </p>
+            )}
+            {offerable.map((w) => {
+              // An administrator holds every panel already, so the boxes
+              // are ticked and fixed - except the clock, which is handed
+              // out one person at a time whoever they are.
+              const fixed = form.accessRole === "Administrator" && !isGrantOnly(w.key);
+              const on = fixed || dashboard.includes(w.key);
+              return (
+                <label
+                  key={w.key}
+                  className={`flex items-start gap-2.5 px-3 py-2 rounded-lg border transition-colors ${
+                    isAdmin && !fixed ? "cursor-pointer hover:bg-[#fafafa]" : "cursor-not-allowed opacity-70"
+                  } ${on ? "border-[#0a0a0a] bg-[#fafafa]" : "border-[#eaeaea]"}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    disabled={!isAdmin || fixed}
+                    onChange={() =>
+                      setDashboard((prev) =>
+                        prev.includes(w.key) ? prev.filter((k) => k !== w.key) : [...prev, w.key],
+                      )
+                    }
+                    className="mt-0.5 w-3.5 h-3.5 accent-[#0a0a0a] cursor-pointer"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-medium text-[#0a0a0a]">{w.label}</span>
+                    <span className="block text-[11px] text-[#999]">{w.hint}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="border-t border-[#f7f7f7] pt-4">
+          <p className="text-[10px] font-semibold text-[#999] uppercase tracking-widest mb-1">Page Access</p>
+          <p className="text-xs text-[#999] mb-3 flex items-center gap-1.5">
+            {access.length} of {NAV_PAGES.length} pages granted
+            {!isAdmin && (
+              <span className="inline-flex items-center gap-1 text-[#bbb]">
+                <Lock className="w-3 h-3" /> only admins can change this
+              </span>
+            )}
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {PAGE_SECTIONS.map((section) => {
+            const pages = NAV_PAGES.filter((p) => p.section === section);
+            const hrefs = pages.map((p) => p.href);
+            const sectionOptions = pages.flatMap((p) => optionsForPage(p.href));
+            const allGranted = hrefs.every((h) => access.includes(h));
+            return (
+              <div key={section}>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <p className="text-[10px] font-semibold text-[#bbb] uppercase tracking-widest">{section}</p>
+                  {/* RingLogix alone is eleven pages; granting a whole area
+                      shouldn't be eleven clicks. */}
+                  {isAdmin && pages.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAccess((prev) =>
+                          allGranted
+                            ? prev.filter((h) => !hrefs.includes(h))
+                            : [...new Set([...prev, ...hrefs])]
+                        )
+                      }
+                      className="text-[10px] font-medium text-[#999] hover:text-[#0a0a0a] transition-colors"
+                    >
+                      {allGranted ? "Clear all" : "Select all"}
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {pages.map((page) => {
+                    // The dashboard is everyone's now, so its checkbox
+                    // would be a control that does nothing: shown as
+                    // always on instead, with the panels above deciding
+                    // what it actually contains.
+                    if (page.href === "/") {
+                      return (
+                        <span
+                          key={page.href}
+                          data-tip="Everyone has the dashboard. The panels on it are granted above."
+                          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border bg-[#f5f5f5] text-[#666] border-[#eaeaea]"
+                        >
+                          <Check className="w-3 h-3 shrink-0" />
+                          {page.label}
+                          <span className="text-[10px] text-[#bbb]">always</span>
+                        </span>
+                      );
+                    }
+                    const granted = access.includes(page.href);
+                    if (!isAdmin) {
+                      return (
+                        <span
+                          key={page.href}
+                          className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border ${
+                            granted
+                              ? "bg-[#f5f5f5] text-[#666] border-[#eaeaea]"
+                              : "bg-white text-[#ccc] border-[#f0f0f0]"
+                          }`}
+                        >
+                          {granted && <Check className="w-3 h-3 shrink-0" />}
+                          {page.label}
+                        </span>
+                      );
+                    }
+                    return (
+                      <button
+                        key={page.href}
+                        type="button"
+                        onClick={() => togglePage(page.href)}
+                        className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-all ${
+                          granted
+                            ? "bg-[#0a0a0a] text-white border-[#0a0a0a] hover:bg-[#333]"
+                            : "bg-white text-[#999] border-[#eaeaea] hover:border-[#aaa] hover:text-[#555]"
+                        }`}
+                      >
+                        {granted && <Check className="w-3 h-3 shrink-0" />}
+                        {page.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Grants that sit inside a page rather than opening one.
+                    They hang under the page they belong to, because on
+                    their own they mean nothing: the Customers page is what
+                    shows the balance. */}
+                {sectionOptions.length > 0 && (
+                  <div className="mt-2 space-y-1.5">
+                    {sectionOptions.map((opt) => {
+                      const pageLabel = NAV_PAGES.find((p) => p.href === opt.page)?.label ?? opt.page;
+                      const pageGranted = access.includes(opt.page);
+                      // Not fixed for administrators. They start with it,
+                      // but the box is theirs to untick - on their own
+                      // record as much as anyone's, which is the only way
+                      // to see what the people they withhold it from see.
+                      const on = pageGranted && pageOptions.includes(opt.key);
+                      const locked = !isAdmin || !pageGranted;
+                      return (
+                        <label
+                          key={opt.key}
+                          className={`flex items-start gap-2.5 px-3 py-2 rounded-lg border transition-colors ${
+                            locked ? "cursor-not-allowed opacity-70" : "cursor-pointer hover:bg-[#fafafa]"
+                          } ${on ? "border-[#0a0a0a] bg-[#fafafa]" : "border-[#eaeaea]"}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            disabled={locked}
+                            onChange={() =>
+                              setPageOptions((prev) =>
+                                prev.includes(opt.key)
+                                  ? prev.filter((k) => k !== opt.key)
+                                  : [...prev, opt.key],
+                              )
+                            }
+                            className="mt-0.5 w-3.5 h-3.5 accent-[#0a0a0a] cursor-pointer"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-[13px] font-medium text-[#0a0a0a]">{opt.label}</span>
+                            <span className="block text-[11px] text-[#999]">
+                              {pageGranted ? opt.hint : `Grant ${pageLabel} above first.`}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Danger zone */}
+        <div className="border-t border-[#f7f7f7] pt-4 mt-2">
+          <p className="text-[10px] font-semibold text-[#999] uppercase tracking-widest mb-3">Danger Zone</p>
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            className="flex items-center gap-2 text-sm font-medium text-[#dc2626] border border-[#fecaca] px-4 py-2 rounded-lg hover:bg-[#fff5f5] transition-colors"
+          >
+            Delete Employee
+          </button>
+        </div>
+
+        <ConfirmDialog
+          open={confirmDelete}
+          title={`Delete ${employee.name}?`}
+          description={`This will permanently remove ${employee.name} from the system. All their data will be lost and this cannot be undone.`}
+          confirmLabel={deleting ? "Deleting…" : "Yes, Delete"}
+          loading={deleting}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      </div>
+    </Drawer>
+  );
+}

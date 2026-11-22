@@ -2,45 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { getUnreadCountByPrefId, TICKET_NOTIF_PREF_ID } from "@/lib/notifications";
 import {
   LayoutDashboard,
-  Building2,
-  TicketCheck,
   MessageSquare,
-  Phone,
-  PhoneCall,
-  KanbanSquare,
-  Settings2,
-  Wifi,
-  AlertTriangle,
+  BookUser,
   Users,
-  Clock,
-  FolderKanban,
-  FileBarChart,
+  CalendarDays,
+  KanbanSquare,
+  StickyNote,
   ScrollText,
+  Settings2,
   ChevronLeft,
   ChevronRight,
   X,
-  DollarSign,
-  UserCircle,
-  Laptop,
-  Headphones,
-  Video,
-  Mic,
-  BookUser,
-  Building,
-  AlarmClock,
-  GitBranch,
-  Cpu,
-  KeyRound,
-  Zap,
-  CalendarDays,
-  StickyNote,
-  Target,
-  Boxes,
+  Circle,
 } from "lucide-react";
+import { NAV_PAGES } from "@/lib/nav-pages";
 
 interface NavItem {
   label: string;
@@ -59,87 +36,31 @@ interface SidebarProps {
   userSubtext?: string;
 }
 
-const navSections: { label: string; items: NavItem[] }[] = [
-  {
-    label: "",
-    items: [
-      { label: "Dashboard", href: "/",          icon: LayoutDashboard },
-      { label: "Customers", href: "/customers", icon: Building2       },
-      { label: "Leads",     href: "/leads",     icon: Target          },
-      { label: "Tickets",      href: "/tickets",      icon: TicketCheck },
-      { label: "Messages",     href: "/messages",     icon: MessageSquare },
-      { label: "Quick Access", href: "/quick-access", icon: Zap        },
-    ],
-  },
-  // RingLogix section: temporarily disabled
-  // {
-  //   label: "RingLogix",
-  //   items: [
-  //     { label: "Subscribers",   href: "/subscribers",   icon: UserCircle  },
-  //     { label: "Phone Numbers", href: "/phone-numbers", icon: Phone       },
-  //     { label: "Call Records",  href: "/call-records",  icon: PhoneCall   },
-  //     { label: "Recordings",    href: "/recordings",    icon: Mic         },
-  //     { label: "Devices",       href: "/devices",       icon: Laptop      },
-  //     { label: "Queues",        href: "/queues",        icon: Headphones  },
-  //     { label: "Conferences",   href: "/conferences",   icon: Video       },
-  //     { label: "Billing",       href: "/billing",       icon: DollarSign  },
-  //     { label: "Contacts",      href: "/contacts",      icon: BookUser   },
-  //     { label: "Departments",   href: "/departments",   icon: Building   },
-  //     { label: "Wake-Up Calls", href: "/wake-up-calls", icon: AlarmClock },
-  //     { label: "Dial Rules",    href: "/dial-rules",    icon: GitBranch  },
-  //     { label: "Device Models", href: "/device-models", icon: Cpu        },
-  //   ],
-  // },
-  {
-    label: "UniFi",
-    items: [
-      { label: "Sites",  href: "/sites",  icon: Wifi },
-      { label: "Alerts", href: "/alerts", icon: AlertTriangle },
-    ],
-  },
-  {
-    label: "GDMS",
-    items: [
-      { label: "Devices", href: "/gdms", icon: Cpu },
-    ],
-  },
-  {
-    label: "Operations",
-    items: [
-      { label: "Tasks",     href: "/tasks",     icon: KanbanSquare },
-      { label: "Calendar",  href: "/calendar",  icon: CalendarDays },
-      { label: "Projects",  href: "/projects",  icon: FolderKanban },
-      { label: "Notes",     href: "/notes",     icon: StickyNote   },
-      { label: "Reports",   href: "/reports",   icon: FileBarChart },
-      { label: "Inventory", href: "/inventory", icon: Boxes       },
-      { label: "Logs",      href: "/logs",      icon: ScrollText   },
-    ],
-  },
-  {
-    label: "People",
-    items: [
-      { label: "Employees",  href: "/employees",  icon: Users },
-      { label: "Time Clock", href: "/time-clock", icon: Clock },
-    ],
-  },
-  {
-    label: "Security",
-    items: [
-      { label: "Vault", href: "/vault", icon: KeyRound },
-    ],
-  },
-];
+const ICONS: Record<string, React.ElementType> = {
+  "/":          LayoutDashboard,
+  "/messages":  MessageSquare,
+  "/contacts":  BookUser,
+  "/employees": Users,
+  "/calendar":  CalendarDays,
+  "/tasks":     KanbanSquare,
+  "/notes":     StickyNote,
+  "/logs":      ScrollText,
+};
+
+// Built from NAV_PAGES rather than kept as its own list. The port from
+// the ERP carried a hand-written copy across that still linked to fifteen
+// pages left behind (customers, tickets, vault, UniFi…) and had no entry
+// for Contacts. Settings lives in the footer, so it is left out here.
+const navSections: { label: string; items: NavItem[] }[] = [];
+for (const page of NAV_PAGES) {
+  if (page.href === "/settings") continue;
+  let section = navSections.find((s) => s.label === page.section);
+  if (!section) navSections.push((section = { label: page.section, items: [] }));
+  section.items.push({ label: page.label, href: page.href, icon: ICONS[page.href] ?? Circle });
+}
 
 export default function Sidebar({ collapsed, onToggle, mobileOpen = false, onMobileClose, allowedHrefs, userDisplayName = "Yash Harale", userInitials = "YH", userSubtext = "Admin" }: SidebarProps) {
   const pathname = usePathname();
-  const [unseenTickets, setUnseenTickets] = useState(0);
-
-  useEffect(() => {
-    setUnseenTickets(getUnreadCountByPrefId(TICKET_NOTIF_PREF_ID));
-    function onNotif() { setUnseenTickets(getUnreadCountByPrefId(TICKET_NOTIF_PREF_ID)); }
-    window.addEventListener("app-notification", onNotif as EventListener);
-    return () => window.removeEventListener("app-notification", onNotif as EventListener);
-  }, []);
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
@@ -247,16 +168,6 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen = false, onMob
                           <span className="text-sm font-medium leading-none whitespace-nowrap flex-1">
                             {item.label}
                           </span>
-                        )}
-
-                        {!collapsed && item.href === "/tickets" && unseenTickets > 0 && (
-                          <span className="ml-auto flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#dc2626] text-white text-[10px] font-bold leading-none">
-                            {unseenTickets > 99 ? "99+" : unseenTickets}
-                          </span>
-                        )}
-
-                        {collapsed && item.href === "/tickets" && unseenTickets > 0 && (
-                          <span className="absolute top-1 right-1.5 w-2 h-2 rounded-full bg-[#dc2626] ring-2 ring-white" />
                         )}
 
                         {collapsed && (

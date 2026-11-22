@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getContacts, createContact, deleteContact, isConfigured } from "@/lib/ringlogix";
+import { getContacts, createContact, deleteContact, isConfigured, ourDomain } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
 import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
 
@@ -18,7 +18,8 @@ function refuse(err: unknown) {
 export async function GET(req: NextRequest) {
   if (!isConfigured()) return NextResponse.json({ error: "not_configured" }, { status: 503 });
   const p = req.nextUrl.searchParams;
-  const domain = p.get("domain") ?? "";
+  // Ours unless told otherwise, as in the Messages route.
+  const domain = p.get("domain")?.trim() || ourDomain();
   const user   = p.get("user") ?? "";
   try {
     await requireEmployee();
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
   try {
     await requireEmployee();
     const body = await req.json();
-    const data = await createContact(body.domain, body.user, body.first_name, body.last_name, {
+    const data = await createContact(body.domain || ourDomain(), body.user, body.first_name, body.last_name, {
       company: body.company, work_phone: body.work_phone,
       cell_phone: body.cell_phone, home_phone: body.home_phone, email: body.email,
     });
@@ -53,7 +54,7 @@ export async function DELETE(req: NextRequest) {
   try {
     await requireEmployee();
     const body = await req.json();
-    const data = await deleteContact(body.domain, body.user, body.first_name, body.last_name, body.contact_id);
+    const data = await deleteContact(body.domain || ourDomain(), body.user, body.first_name, body.last_name, body.contact_id);
     return NextResponse.json(data);
   } catch (err) {
     return refuse(err);

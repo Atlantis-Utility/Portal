@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useConfirm } from "@/lib/confirm";
 import Overlay from "@/components/ui/Overlay";
 import Header from "@/components/layout/Header";
 import ExportMenu from "@/components/ui/ExportMenu";
-import Select from "@/components/ui/Select";
 import { BookUser, Mail, Smartphone, Phone, RefreshCw, AlertCircle, Plus, X, Trash2 } from "lucide-react";
 
 import { formatPhone } from "@/lib/utils";
@@ -23,11 +22,6 @@ interface Contact {
   tags?: string;
   contact_id?: string;
   ts?: string;
-}
-
-interface Customer {
-  domain: string;
-  [key: string]: unknown;
 }
 
 type ViewState = "idle" | "loading" | "unconfigured" | "error" | "ok";
@@ -48,8 +42,9 @@ export default function ContactsPage() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
 
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [domain, setDomain] = useState("");
+  // The domain is always ours: the route fills it in, as Messages does.
+  // The ERP picked from every reseller customer's domain, through a
+  // /api/ringlogix/customers route that did not come across.
   const [user, setUser] = useState("");
 
   const [showModal, setShowModal] = useState(false);
@@ -57,22 +52,11 @@ export default function ContactsPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
-  useEffect(() => {
-    fetch("/api/ringlogix/customers")
-      .then((r) => r.json())
-      .then((d) => {
-        const arr: Customer[] = Array.isArray(d) ? d : (d?.data ?? []);
-        setCustomers(arr);
-        if (arr.length > 0) setDomain(arr[0].domain);
-      })
-      .catch(() => {});
-  }, []);
-
   const load = useCallback(async () => {
-    if (!domain || !user) return;
+    if (!user) return;
     setState("loading");
     try {
-      const res = await fetch(`/api/ringlogix/contacts?domain=${encodeURIComponent(domain)}&user=${encodeURIComponent(user)}`);
+      const res = await fetch(`/api/ringlogix/contacts?user=${encodeURIComponent(user)}`);
       if (res.status === 503) { setState("unconfigured"); return; }
       const data = await res.json();
       if (data?.error === "not_configured") { setState("unconfigured"); return; }
@@ -84,7 +68,7 @@ export default function ContactsPage() {
       setError(e instanceof Error ? e.message : "Failed to load");
       setState("error");
     }
-  }, [domain, user]);
+  }, [user]);
 
   const deleteContact = async (c: Contact) => {
     const ok = await confirm({
@@ -119,7 +103,7 @@ export default function ContactsPage() {
       const res = await fetch("/api/ringlogix/contacts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, domain, user }),
+        body: JSON.stringify({ ...form, user }),
       });
       if (!res.ok) {
         const d = await res.json();
@@ -179,17 +163,8 @@ export default function ContactsPage() {
         }
       />
 
-      {/* Domain + User selector */}
+      {/* Extension selector */}
       <div className="bg-white border border-[#eaeaea] rounded-xl p-4 mb-5 flex flex-wrap items-end gap-3">
-        <div className="flex flex-col gap-1 w-45">
-          <label className="text-[10px] font-semibold text-[#999] uppercase tracking-wider">Domain</label>
-          <Select
-            value={domain}
-            onChange={setDomain}
-            placeholder="Select domain…"
-            options={customers.map((c) => ({ value: c.domain, label: c.domain }))}
-          />
-        </div>
         <div className="flex flex-col gap-1">
           <label className="text-[10px] font-semibold text-[#999] uppercase tracking-wider">User / Extension</label>
           <input
@@ -202,7 +177,7 @@ export default function ContactsPage() {
         </div>
         <button
           onClick={load}
-          disabled={!domain || !user || state === "loading"}
+          disabled={!user || state === "loading"}
           className="flex items-center gap-2 border border-[#eaeaea] bg-white text-sm font-medium text-[#0a0a0a] px-4 py-1.5 rounded-lg hover:bg-[#fafafa] transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${state === "loading" ? "animate-spin" : ""}`} />
@@ -270,7 +245,7 @@ export default function ContactsPage() {
         {state === "idle" && (
           <div className="p-12 text-center">
             <BookUser className="w-6 h-6 text-[#999] mx-auto mb-3" />
-            <p className="text-sm text-[#666]">Select a domain and user, then click Load.</p>
+            <p className="text-sm text-[#666]">Enter an extension, then click Load.</p>
           </div>
         )}
 

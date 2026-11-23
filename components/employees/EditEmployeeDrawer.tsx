@@ -13,6 +13,7 @@ import { defaultPageOptions, optionsForPage, PAGE_OPTIONS } from "@/lib/page-opt
 import { availableWidgets, defaultDashboardWidgets, isGrantOnly } from "@/lib/dashboard-widgets";
 import { Check, Lock, Mail } from "lucide-react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import SetPasswordPanel from "@/components/employees/SetPasswordPanel";
 import { getErrorMessage } from "@/lib/utils";
 import { useToast } from "@/lib/toast";
 import { useAuth } from "@/lib/auth-context";
@@ -293,6 +294,17 @@ export default function EditEmployeeDrawer({ open, onClose, employee }: Props) {
                 <Mail className="w-3.5 h-3.5" />
                 {inviting ? "Sending…" : "Send sign-in link"}
               </button>
+            </div>
+            <div className="mt-4 pt-4 border-t border-dashed border-[#eaeaea]">
+              <p className="text-[13px] font-medium text-[#0a0a0a] mb-0.5">Or set a password yourself</p>
+              <p className="text-[11px] text-[#999] leading-relaxed mb-3">
+                No email needed: you pass it on to them. Replaces any password they have now. Their Microsoft
+                sign-in, if any, keeps working.
+              </p>
+              <SetPasswordPanel
+                email={form.email.trim()}
+                onDone={(message, ok) => (ok ? success(message) : notifyError(message))}
+              />
             </div>
           </div>
         )}

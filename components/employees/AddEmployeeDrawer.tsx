@@ -9,6 +9,10 @@ import FormField, { inputClass } from "@/components/ui/FormField";
 import Select from "@/components/ui/Select";
 import { addEmployee } from "@/lib/db/employees";
 import { sendInvite } from "@/lib/invites";
+import { PasswordFields, setPasswordFor } from "@/components/employees/SetPasswordPanel";
+import { passwordProblem } from "@/components/auth/ChangePasswordForm";
+
+type SignIn = "password" | "invite" | "microsoft";
 import { useToast } from "@/lib/toast";
 import type { Employee, EmployeeStatus, AccessRole } from "@/lib/mock-data";
 
@@ -34,9 +38,12 @@ type FormErrors = Partial<Record<keyof typeof emptyForm, string>>;
 
 export default function AddEmployeeDrawer({ open, onClose, onAdded }: Props) {
   const toast = useToast();
-  // On by default: a user who is added but never told can't sign in, and
-  // stays "Pending" on the Users page until they do.
-  const [invite, setInvite] = useState(true);
+  // How they'll sign in. Until somebody picks, it follows the address:
+  // our own Microsoft accounts use the Microsoft button, anyone else gets a
+  // password (an emailed invite needs Resend set up).
+  const [signInChoice, setSignInChoice] = useState<SignIn | null>(null);
+  const [password, setPassword] = useState("");
+  const [temporary, setTemporary] = useState(true);
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState<FormErrors>({});
   const [saving, setSaving] = useState(false);
@@ -55,6 +62,9 @@ export default function AddEmployeeDrawer({ open, onClose, onAdded }: Props) {
     if (saveError) setSaveError("");
   }
 
+  const signIn: SignIn = signInChoice ?? (/@atlantisutility\.com$/i.test(form.email.trim()) ? "microsoft" : "password");
+  const invite = signIn === "invite";
+
   function validate(): boolean {
     const errs: FormErrors = {};
     if (!form.name.trim()) errs.name = "Name is required";
@@ -64,7 +74,9 @@ export default function AddEmployeeDrawer({ open, onClose, onAdded }: Props) {
     if (!form.role.trim()) errs.role = "Role is required";
     if (!form.location.trim()) errs.location = "Location is required";
     setErrors(errs);
-    return Object.keys(errs).length === 0;
+    const pwProblem = signIn === "password" ? passwordProblem(password) : null;
+    if (pwProblem) setSaveError(`Password: ${pwProblem}`);
+    return Object.keys(errs).length === 0 && !pwProblem;
   }
 
   async function handleSubmit() {
@@ -116,13 +128,22 @@ export default function AddEmployeeDrawer({ open, onClose, onAdded }: Props) {
     }
     // The user is saved either way; the invite is reported on its own, so
     // "added, but the email didn't go" reads as exactly that.
-    if (invite) {
+    if (signIn === "invite") {
       const sent = await sendInvite(newEmp.email);
       if (sent.ok) toast.success(`${newEmp.name} added. ${sent.message}`);
       else toast.error(`${newEmp.name} added, but the invite wasn't sent. ${sent.message} You can resend it from the Users list.`);
+    } else if (signIn === "password") {
+      try {
+        await setPasswordFor(newEmp.email, password, temporary);
+        toast.success(`${newEmp.name} added with a password. Give it to them yourself${temporary ? "; they'll choose their own at first sign-in" : ""}.`);
+      } catch (err) {
+        toast.error(`${newEmp.name} added, but the password wasn't set. ${err instanceof Error ? err.message : ""} You can set it from Edit Profile.`);
+      }
     } else {
-      toast.success(`${newEmp.name} added. They show as not invited until you send one.`);
+      toast.success(`${newEmp.name} added. They sign in with “Continue with Microsoft”.`);
     }
+    setPassword("");
+    setSignInChoice(null);
 
     setForm(emptyForm);
     setErrors({});
@@ -267,16 +288,35 @@ export default function AddEmployeeDrawer({ open, onClose, onAdded }: Props) {
           />
         </FormField>
 
-        <label className="flex items-start gap-3 rounded-xl border border-[#eaeaea] bg-[#fafafa] p-3.5 cursor-pointer">
-          <input type="checkbox" className="mt-0.5" checked={invite} onChange={(e) => setInvite(e.target.checked)} />
-          <span>
-            <span className="block text-sm font-medium text-[#0a0a0a]">Email them an invite</span>
-            <span className="block text-xs text-[#666] mt-0.5">
-              They get a link to set a password (valid 24 hours) and show as Pending until they sign in.
-              Anyone in the Atlantis Microsoft account can also just use “Continue with Microsoft”.
-            </span>
-          </span>
-        </label>
+        <div className="border-t border-[#f7f7f7] pt-4">
+          <p className="text-[10px] font-semibold text-[#999] uppercase tracking-widest mb-3">Sign-in</p>
+          <div className="space-y-2">
+            {([
+              ["password", "Set a password now", "For anyone outside our Microsoft account. You pass the password on; no email needed."],
+              ["invite", "Email them an invite", "A link to choose their own password (valid 24 hours). Needs email sending set up."],
+              ["microsoft", "Microsoft only", "They use “Continue with Microsoft” with their Atlantis account. Nothing to send."],
+            ] as const).map(([value, title, hint]) => (
+              <label
+                key={value}
+                className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${
+                  signIn === value ? "border-[#0a0a0a] bg-[#fafafa]" : "border-[#eaeaea] hover:border-[#d4d4d4]"
+                }`}
+              >
+                <input type="radio" className="mt-0.5" checked={signIn === value} onChange={() => setSignInChoice(value)} />
+                <span>
+                  <span className="block text-sm font-medium text-[#0a0a0a]">{title}</span>
+                  <span className="block text-xs text-[#666] mt-0.5">{hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          {signIn === "password" && (
+            <div className="mt-3">
+              <PasswordFields password={password} onPassword={setPassword} temporary={temporary} onTemporary={setTemporary} />
+            </div>
+          )}
+          <p className="text-[11px] text-[#999] mt-2">They show as Pending on the Users page until they first sign in.</p>
+        </div>
       </div>
     </Drawer>
   );

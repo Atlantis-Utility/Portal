@@ -8,6 +8,9 @@ import { getLogs, logActivity, type ActivityLogEntry } from "@/lib/activity-log"
 import { getInitials, formatPhone } from "@/lib/utils";
 import { Pencil, Check, Mail, Shield, Clock, Phone, MapPin, Briefcase, Building2, X, Calendar, Activity } from "lucide-react";
 import Header from "@/components/layout/Header";
+import ChangePasswordForm from "@/components/auth/ChangePasswordForm";
+import { useToast } from "@/lib/toast";
+import { KeyRound } from "lucide-react";
 import FormField, { inputClass } from "@/components/ui/FormField";
 import type { Employee } from "@/lib/mock-data";
 
@@ -51,6 +54,54 @@ function ReadonlyBadge() {
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────
+
+/**
+ * Your own password. A Microsoft-only login can add one (to sign in with
+ * email and password too); one that already has a password is asked for it.
+ */
+function PasswordCard() {
+  const { authUser } = useAuth();
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const hasPassword = (authUser?.user.identities ?? []).some((i) => i.provider === "email");
+  const viaMicrosoft = (authUser?.user.identities ?? []).some((i) => i.provider === "azure");
+  return (
+    <div className="bg-white border border-[#eaeaea] rounded-xl p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-semibold text-[#999] uppercase tracking-widest mb-2">Password</p>
+          <p className="text-sm text-[#666] flex items-center gap-2">
+            <KeyRound className="w-3.5 h-3.5 text-[#999]" />
+            {hasPassword
+              ? "You can sign in with your email and password."
+              : viaMicrosoft
+                ? "You sign in with Microsoft. Add a password to sign in with your email too."
+                : "No password set yet."}
+          </p>
+        </div>
+        {!open && (
+          <button
+            onClick={() => setOpen(true)}
+            className="shrink-0 border border-[#eaeaea] bg-white text-[13px] font-medium text-[#0a0a0a] px-3 py-1.5 rounded-lg hover:bg-[#fafafa] transition-colors"
+          >
+            {hasPassword ? "Change password" : "Set a password"}
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="mt-5 max-w-sm">
+          <ChangePasswordForm
+            askCurrent={hasPassword}
+            onDone={() => { setOpen(false); toast.success(hasPassword ? "Password changed." : "Password set."); }}
+          />
+          <button onClick={() => setOpen(false)} className="mt-2 w-full text-[13px] text-[#666] py-1.5 rounded-lg hover:bg-[#fafafa]">
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AccountPage() {
   const { authUser, updateDisplayName } = useAuth();
@@ -396,6 +447,8 @@ export default function AccountPage() {
               </div>
             )}
           </div>
+
+          <PasswordCard />
         </div>
 
         {/* ── Right: activity ── */}

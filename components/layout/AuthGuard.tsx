@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { firstAllowedPage, hasPageAccess } from "@/lib/nav-pages";
 import NotFound from "@/app/not-found";
+import ChangePasswordForm from "@/components/auth/ChangePasswordForm";
 
 // `authUser.access` (undefined = unrestricted) is only used to hide sidebar
 // links today, it never stopped someone from typing/bookmarking the URL
@@ -47,6 +48,31 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!authUser) return null;
+
+  // Signed in with a password an administrator set: nothing opens until
+  // they've chosen their own. The API refuses them too (lib/api-auth.ts).
+  if (authUser.user.app_metadata?.must_change_password) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#fafafa] p-4">
+        <div className="w-full max-w-sm bg-white border border-[#eaeaea] rounded-2xl p-8 shadow-sm">
+          <h1 className="text-xl font-semibold text-[#0a0a0a] mb-1">Choose your own password</h1>
+          <p className="text-sm text-[#666] mb-6">
+            The one you signed in with was set for you. Pick a new one only you know; you&apos;ll use it from now on.
+          </p>
+          {/* A full reload, so every part of the app starts from the
+              refreshed session rather than the one still holding the flag. */}
+          <ChangePasswordForm submitLabel="Save and continue" onDone={() => window.location.replace("/")} />
+          <button
+            onClick={() => logout()}
+            className="mt-3 w-full text-[13px] text-[#666] py-1.5 rounded-lg hover:bg-[#fafafa] transition-colors"
+          >
+            Sign out
+          </button>
+          <p className="text-[11px] text-[#bbb] mt-3 text-center">{authUser.email}</p>
+        </div>
+      </div>
+    );
+  }
 
   // A revoked/never-granted page renders as a genuine 404, not a redirect;
   // it shouldn't even confirm to the visitor that the route exists. Because

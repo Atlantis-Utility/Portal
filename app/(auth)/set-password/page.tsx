@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import BrandMark from "@/components/ui/BrandMark";
 import { supabase } from "@/lib/supabase/client";
+import { PASSWORD_HINT, passwordProblem } from "@/components/auth/ChangePasswordForm";
 
 /**
  * Where an invite or a reset link lands.
@@ -59,8 +60,9 @@ function SetPasswordForm() {
 
   async function save() {
     setError("");
-    if (password.length < MIN_LENGTH) {
-      setError(`Use at least ${MIN_LENGTH} characters.`);
+    const problem = password.length < MIN_LENGTH ? `Use at least ${MIN_LENGTH} characters.` : passwordProblem(password);
+    if (problem) {
+      setError(problem);
       return;
     }
     if (password !== confirm) {
@@ -68,12 +70,20 @@ function SetPasswordForm() {
       return;
     }
     setStage("saving");
-    const { error: updateError } = await supabase.auth.updateUser({ password });
-    if (updateError) {
-      setError(updateError.message);
+    // Through our route rather than updateUser, so a temporary password's
+    // hold is lifted too; the link's own sign-in stands in for the old one.
+    const res = await fetch("/api/auth/my-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    }).catch(() => null);
+    const body = (await res?.json().catch(() => ({}))) as { error?: string } | undefined;
+    if (!res?.ok) {
+      setError(body?.error ?? "Couldn't save it. Try again.");
       setStage("ready");
       return;
     }
+    await supabase.auth.refreshSession().catch(() => {});
     setStage("done");
     // Straight in: verifying the link already signed them in, and the
     // password they just set is the one they'll use next time.
@@ -146,7 +156,7 @@ function SetPasswordForm() {
                   autoFocus
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={`At least ${MIN_LENGTH} characters`}
+                  placeholder={PASSWORD_HINT}
                   className="w-full text-sm border border-[#eaeaea] rounded-lg px-3 py-2.5 outline-none focus:border-[#0070f3] transition-colors"
                 />
               </div>

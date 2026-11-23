@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import BrandMark from "@/components/ui/BrandMark";
+import { Mail } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 /**
@@ -100,18 +101,23 @@ export default function LoginForm() {
       return;
     }
     setBusy(true);
+    let noEmail = false;
     try {
-      await fetch("/api/auth/password-link", {
+      const res = await fetch("/api/auth/password-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), kind: "reset" }),
       });
+      // The one answer that isn't the same for everyone: this deployment
+      // can't send email at all, which says nothing about the address.
+      noEmail = res.status === 503;
     } catch {
       // Ignored on purpose: the answer is the same either way, so a failure
       // here can't be used to work out who has an account.
     } finally {
       setBusy(false);
-      setSent(true);
+      if (noEmail) setError("Password reset emails aren't switched on yet. Ask an administrator to set a new password for you.");
+      else setSent(true);
     }
   }
 
@@ -174,7 +180,7 @@ export default function LoginForm() {
                   autoFocus
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@atlantisutility.com"
+                  placeholder="you@example.com"
                   className="w-full text-sm border border-[#eaeaea] rounded-lg px-3 py-2.5 outline-none focus:border-[#0070f3] transition-colors"
                 />
                 <button
@@ -198,7 +204,7 @@ export default function LoginForm() {
           <>
             <div className="mb-6">
               <h1 className="text-xl font-semibold text-[#0a0a0a] mb-1">Sign in</h1>
-              <p className="text-sm text-[#666]">Use your work account to continue.</p>
+              <p className="text-sm text-[#666]">Microsoft for Atlantis accounts, email and password for everyone else.</p>
             </div>
 
             <div className="space-y-3">
@@ -225,13 +231,16 @@ export default function LoginForm() {
 
             </div>
 
+            {/* For everyone without an Atlantis Microsoft account: an
+                administrator sets them up with a password. */}
             {!showPassword && (
               <button
                 type="button"
                 onClick={() => setShowPassword(true)}
-                className="mt-5 w-full text-center text-[12px] text-[#666] py-1.5 rounded-lg hover:bg-[#fafafa] transition-colors"
+                className="mt-3 w-full flex items-center gap-3 border border-[#eaeaea] bg-white text-sm font-medium text-[#0a0a0a] px-4 py-2.5 rounded-lg hover:bg-[#fafafa] transition-colors"
               >
-                Sign in with a password instead
+                <Mail className="w-4.5 h-4.5 text-[#666] shrink-0" />
+                <span className="flex-1 text-left">Continue with email and password</span>
               </button>
             )}
 
@@ -249,7 +258,7 @@ export default function LoginForm() {
                     autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@atlantisutility.com"
+                    placeholder="you@example.com"
                     className="w-full text-sm border border-[#eaeaea] rounded-lg px-3 py-2.5 outline-none focus:border-[#0070f3] transition-colors"
                   />
                   <input

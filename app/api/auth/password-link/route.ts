@@ -62,6 +62,15 @@ export async function POST(req: Request) {
       invitedByName = actor.email;
     }
 
+    // Before any lookup, so "email isn't set up" answers the same for every
+    // address and can't be used to tell who has an account.
+    if (!isEmailConfigured()) {
+      return NextResponse.json(
+        { error: "Email isn't configured on this deployment, so the link can't be sent.", code: "email_not_configured" },
+        { status: 503 },
+      );
+    }
+
     const employee = await employeeFor(email);
     if (kind === "invite" && !employee) {
       return NextResponse.json(
@@ -74,13 +83,6 @@ export async function POST(req: Request) {
     // we do: an endpoint that says "no such account" is an endpoint that
     // lists your staff for anyone who asks.
     if (kind === "reset" && !employee) return NextResponse.json({ ok: true });
-
-    if (!isEmailConfigured()) {
-      return NextResponse.json(
-        { error: "Email isn't configured on this deployment, so the link can't be sent." },
-        { status: 503 },
-      );
-    }
 
     const db = createServiceRoleClient();
     const { data: userList } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });

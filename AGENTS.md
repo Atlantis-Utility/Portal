@@ -93,6 +93,13 @@ for which migrations to run.
   ticked in Edit Profile — administrators included.
 - **Identity is by email**, never `employee_id`: administrators have a
   null one.
+- **Passwords for people outside Microsoft** (`lib/passwords.ts`): an
+  administrator sets one (`/api/auth/admin-password`), temporary by default
+  via `app_metadata.must_change_password`, which `requireEmployee` /
+  `requireAdmin` and AuthGuard all refuse until `/api/auth/my-password`
+  clears it. A person changes their *own* password through their own
+  session (`updateUser`): the admin API's password change ends every
+  session the login has, signing them straight out.
 - `lib/db` reads go through `selectAll`, because PostgREST silently
   truncates a plain select at 1000 rows.
 - Commit message scope names the changed area — `feat (messages): …` —

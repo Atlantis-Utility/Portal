@@ -28,7 +28,7 @@ export async function callerHasPageOption(key: string): Promise<boolean> {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     const email = user?.email;
-    if (!email) return false;
+    if (!email || user?.app_metadata?.must_change_password) return false;
 
     const admin = createServiceRoleClient();
     const { data: employee } = await admin

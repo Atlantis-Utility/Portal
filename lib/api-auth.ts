@@ -10,6 +10,17 @@ export class ApiAuthError extends Error {
   }
 }
 
+/**
+ * Somebody signed in with a password an administrator set for them gets
+ * nothing until they've chosen their own (app/api/auth/my-password, which
+ * doesn't come through here). The screen holds them too (AuthGuard).
+ */
+function refuseTemporaryPassword(user: { app_metadata?: Record<string, unknown> }) {
+  if (user.app_metadata?.must_change_password) {
+    throw new ApiAuthError("Choose a new password first.", 403);
+  }
+}
+
 export interface AdminActor {
   uid: string;
   email: string;
@@ -35,6 +46,7 @@ export async function requireAdmin(): Promise<AdminActor> {
 
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) throw new ApiAuthError("Missing or invalid session", 401);
+  refuseTemporaryPassword(user);
 
   const admin = createServiceRoleClient();
   const email = user.email ?? "";
@@ -81,6 +93,7 @@ export async function requireEmployee(): Promise<EmployeeActor> {
   const supabase = await createClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) throw new ApiAuthError("Missing or invalid session", 401);
+  refuseTemporaryPassword(user);
 
   const email = user.email ?? "";
   if (!email) throw new ApiAuthError("That account has no email address", 403);

@@ -10,6 +10,9 @@ import { Search, Plus } from "lucide-react";
 import type { Employee, EmployeeStatus } from "@/lib/mock-data";
 import AddEmployeeDrawer from "@/components/employees/AddEmployeeDrawer";
 import Select from "@/components/ui/Select";
+import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/lib/toast";
+import { loginState, sendInvite, type SignInStatus } from "@/lib/invites";
 
 const statusConfig: Record<EmployeeStatus, { label: string; bg: string; text: string; dot: string }> = {
   active: {
@@ -43,6 +46,37 @@ export default function EmployeesPage() {
   const router = useRouter();
   // Painted from the last visit's copy while the live list arrives. Safe to
   // read during the first render: AuthGuard means this never hydrates.
+  const { authUser } = useAuth();
+  const toast = useToast();
+  // Only administrators can send invites (the route checks too).
+  const canInvite = Boolean(authUser?.isUnrestricted);
+  // Who has actually signed in, from Supabase Auth (server-side read).
+  const [logins, setLogins] = useState<Record<string, SignInStatus> | null>(null);
+  const [loginsVersion, setLoginsVersion] = useState(0);
+  const [inviting, setInviting] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/employees/sign-in-status", { cache: "no-store" });
+        const data = await res.json();
+        if (alive && res.ok) setLogins(data.users ?? {});
+      } catch {
+        // Without it the column just says nothing yet.
+      }
+    })();
+    return () => { alive = false; };
+  }, [loginsVersion]);
+
+  async function invite(emp: Employee) {
+    setInviting(emp.id);
+    const sent = await sendInvite(emp.email);
+    setInviting(null);
+    if (sent.ok) toast.success(sent.message);
+    else toast.error(sent.message);
+    setLoginsVersion((v) => v + 1);
+  }
+
   const [employees, setEmployees] = useState<Employee[]>(() => {
     try { return JSON.parse(localStorage.getItem("sc:employees") ?? "[]"); } catch { return []; }
   });
@@ -142,6 +176,9 @@ export default function EmployeesPage() {
                 Status
               </th>
               <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">
+                Login
+              </th>
+              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">
                 Location
               </th>
               <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">
@@ -155,7 +192,7 @@ export default function EmployeesPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center text-sm text-[#999] py-12">
+                <td colSpan={8} className="text-center text-sm text-[#999] py-12">
                   {employees.length === 0 ? "Loading employees..." : "No employees match your search."}
                 </td>
               </tr>
@@ -200,6 +237,15 @@ export default function EmployeesPage() {
                         {status.label}
                       </span>
                     </td>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <LoginCell
+                        state={logins ? loginState(logins[emp.email.toLowerCase()]) : null}
+                        info={logins?.[emp.email.toLowerCase()]}
+                        canInvite={canInvite}
+                        busy={inviting === emp.id}
+                        onInvite={() => invite(emp)}
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <span className="text-sm text-[#666]">{emp.location}</span>
                     </td>
@@ -232,7 +278,66 @@ export default function EmployeesPage() {
       <AddEmployeeDrawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
+        onAdded={() => setLoginsVersion((v) => v + 1)}
       />
+    </div>
+  );
+}
+
+/**
+ * Whether this person can actually get in: signed in at least once, invited
+ * and still pending, or never invited.
+ */
+function LoginCell({
+  state, info, canInvite, busy, onInvite,
+}: {
+  state: ReturnType<typeof loginState> | null;
+  info?: SignInStatus;
+  canInvite: boolean;
+  busy: boolean;
+  onInvite: () => void;
+}) {
+  if (state === null) return <span className="inline-block w-16 h-4 rounded bg-surface-3 animate-pulse" />;
+  const when = (iso: string | null | undefined) => (iso ? formatDate(iso) : "");
+  const button = (label: string) =>
+    canInvite && (
+      <button
+        onClick={onInvite}
+        disabled={busy}
+        className="text-[11px] font-medium text-fg-muted hover:text-fg underline underline-offset-2 disabled:opacity-50"
+      >
+        {busy ? "Sending…" : label}
+      </button>
+    );
+
+  if (state === "active") {
+    return (
+      <div>
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-tint-green text-ink-green">
+          <span className="w-1.5 h-1.5 rounded-full bg-ink-green" /> Active
+        </span>
+        <p className="text-[11px] text-fg-subtle mt-1">Last in {when(info?.lastSignInAt)}</p>
+      </div>
+    );
+  }
+  if (state === "pending") {
+    return (
+      <div>
+        <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-tint-amber text-ink-amber">
+          <span className="w-1.5 h-1.5 rounded-full bg-ink-amber" /> Pending
+        </span>
+        <p className="text-[11px] text-fg-subtle mt-1 flex items-center gap-2">
+          {info?.invitedAt ? `Invited ${when(info.invitedAt)}` : "Never signed in"} {button("Resend")}
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-surface-3 text-fg-muted">
+        <span className="w-1.5 h-1.5 rounded-full bg-fg-subtle" /> Not invited
+      </span>
+      <p className="text-[11px] mt-1">{button("Send invite")}</p>
     </div>
   );
 }

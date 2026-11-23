@@ -8,11 +8,15 @@ import { logActivity } from "@/lib/activity-log";
 import FormField, { inputClass } from "@/components/ui/FormField";
 import Select from "@/components/ui/Select";
 import { addEmployee } from "@/lib/db/employees";
+import { sendInvite } from "@/lib/invites";
+import { useToast } from "@/lib/toast";
 import type { Employee, EmployeeStatus, AccessRole } from "@/lib/mock-data";
 
 interface Props {
   open: boolean;
   onClose: () => void;
+  /** After a user is saved, so the list can refresh who's pending. */
+  onAdded?: () => void;
 }
 
 const emptyForm = {
@@ -28,7 +32,11 @@ const emptyForm = {
 
 type FormErrors = Partial<Record<keyof typeof emptyForm, string>>;
 
-export default function AddEmployeeDrawer({ open, onClose }: Props) {
+export default function AddEmployeeDrawer({ open, onClose, onAdded }: Props) {
+  const toast = useToast();
+  // On by default: a user who is added but never told can't sign in, and
+  // stays "Pending" on the Users page until they do.
+  const [invite, setInvite] = useState(true);
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState<FormErrors>({});
   const [saving, setSaving] = useState(false);
@@ -106,10 +114,21 @@ export default function AddEmployeeDrawer({ open, onClose }: Props) {
     } catch (err) {
       console.error("[AddEmployeeDrawer] Post-save side effect failed (employee was added):", err instanceof Error ? err.message : err);
     }
+    // The user is saved either way; the invite is reported on its own, so
+    // "added, but the email didn't go" reads as exactly that.
+    if (invite) {
+      const sent = await sendInvite(newEmp.email);
+      if (sent.ok) toast.success(`${newEmp.name} added. ${sent.message}`);
+      else toast.error(`${newEmp.name} added, but the invite wasn't sent. ${sent.message} You can resend it from the Users list.`);
+    } else {
+      toast.success(`${newEmp.name} added. They show as not invited until you send one.`);
+    }
+
     setForm(emptyForm);
     setErrors({});
     setSaveError("");
     setSaving(false);
+    onAdded?.();
     onClose();
   }
 
@@ -140,7 +159,7 @@ export default function AddEmployeeDrawer({ open, onClose }: Props) {
             disabled={saving}
             className="bg-[#0a0a0a] text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-[#333] transition-colors disabled:opacity-50"
           >
-            {saving ? "Saving..." : "Add User"}
+            {saving ? "Saving..." : invite ? "Add and invite" : "Add User"}
           </button>
         </>
       }
@@ -248,6 +267,16 @@ export default function AddEmployeeDrawer({ open, onClose }: Props) {
           />
         </FormField>
 
+        <label className="flex items-start gap-3 rounded-xl border border-[#eaeaea] bg-[#fafafa] p-3.5 cursor-pointer">
+          <input type="checkbox" className="mt-0.5" checked={invite} onChange={(e) => setInvite(e.target.checked)} />
+          <span>
+            <span className="block text-sm font-medium text-[#0a0a0a]">Email them an invite</span>
+            <span className="block text-xs text-[#666] mt-0.5">
+              They get a link to set a password (valid 24 hours) and show as Pending until they sign in.
+              Anyone in the Atlantis Microsoft account can also just use “Continue with Microsoft”.
+            </span>
+          </span>
+        </label>
       </div>
     </Drawer>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Select from "@/components/ui/Select";
 import Header from "@/components/layout/Header";
 import AddTaskDrawer, { type KanbanCard, type KanbanColumn } from "@/components/tasks/AddTaskDrawer";
 import TaskDetailDrawer from "@/components/tasks/TaskDetailDrawer";
@@ -179,15 +180,13 @@ export default function TasksPage() {
                         {/* Moving a card without dragging it: unglamorous,
                             and it works on a phone, which drag and drop
                             does not. */}
-                        <select
-                          value={card.column}
-                          onChange={(e) => move(card, e.target.value as KanbanColumn)}
-                          className="mt-2 w-full text-[11px] text-[#666] bg-[#fafafa] border border-[#eaeaea] rounded-md px-2 py-1 outline-none focus:border-[#0070f3] transition-colors"
-                        >
-                          {COLUMNS.map((c) => (
-                            <option key={c.key} value={c.key}>Move to {c.label}</option>
-                          ))}
-                        </select>
+                        <div className="mt-2">
+                          <Select
+                            value={card.column}
+                            onChange={(v) => move(card, v as KanbanColumn)}
+                            options={COLUMNS.map((c) => ({ value: c.key, label: `Move to ${c.label}` }))}
+                          />
+                        </div>
                       </article>
                     );
                   })}

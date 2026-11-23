@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Select from "@/components/ui/Select";
 import {
   CalendarClock, X, Plus, Pause, Play, Ban, Trash2, Pencil, RefreshCw, ChevronDown, ChevronRight,
   Users, MessageSquare, FlaskConical, AlertCircle, Search, MoreHorizontal, ArrowLeft, Repeat as RepeatIcon,
@@ -911,11 +912,11 @@ function Editor({
 
                 <div>
                   <label className={label}>Send from</label>
-                  <select className={field} value={fromNumber} onChange={(e) => setFromNumber(e.target.value)}>
-                    {senders.map((s) => (
-                      <option key={s.number} value={s.number}>{formatPhone(s.number) || s.number} · ext {s.user}</option>
-                    ))}
-                  </select>
+                  <Select
+                    value={fromNumber}
+                    onChange={setFromNumber}
+                    options={senders.map((s) => ({ value: s.number, label: `${formatPhone(s.number) || s.number} · ext ${s.user}` }))}
+                  />
                 </div>
               </div>
             )}
@@ -953,11 +954,11 @@ function Editor({
               </div>
               <div>
                 <label className={label}>Repeat</label>
-                <select className={field} value={repeat} onChange={(e) => setRepeat(e.target.value as Repeat)}>
-                  {(Object.keys(REPEAT_LABELS) as Repeat[]).map((r) => (
-                    <option key={r} value={r}>{REPEAT_LABELS[r]}</option>
-                  ))}
-                </select>
+                <Select
+                  value={repeat}
+                  onChange={(v) => setRepeat(v as Repeat)}
+                  options={(Object.keys(REPEAT_LABELS) as Repeat[]).map((r) => ({ value: r, label: REPEAT_LABELS[r] }))}
+                />
               </div>
               {repeat !== "none" && (
                 <div>

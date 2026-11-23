@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Select from "@/components/ui/Select";
 import {
   MessageSquare, RefreshCw, AlertCircle, BellOff,
   Send, Check, MailOpen, Mail, PanelRight, Search, Tag as TagIcon, Paperclip,
@@ -737,13 +738,11 @@ function NewMessage({
         <div className={asExtension ? "hidden" : ""}>
           <label className="block text-[11px] font-medium text-[#666] mb-1.5">From</label>
           {senders.length > 1 ? (
-            <select className={field} value={from} onChange={(e) => setFrom(e.target.value)}>
-              {senders.map((sdr) => (
-                <option key={sdr.number} value={sdr.number}>
-                  {formatPhone(sdr.number) || sdr.number} · ext {sdr.user}
-                </option>
-              ))}
-            </select>
+            <Select
+              value={from}
+              onChange={setFrom}
+              options={senders.map((sdr) => ({ value: sdr.number, label: `${formatPhone(sdr.number) || sdr.number} · ext ${sdr.user}` }))}
+            />
           ) : (
             <p className="text-sm text-[#0a0a0a]">{formatPhone(from) || from || "—"}</p>
           )}

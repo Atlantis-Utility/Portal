@@ -7,6 +7,7 @@ import {
   CheckCircle2, Clock, Zap, FileText, CalendarCheck, Receipt, Wrench, PartyPopper,
 } from "lucide-react";
 import Overlay from "@/components/ui/Overlay";
+import DateTimePicker from "@/components/ui/DateTimePicker";
 import { useToast } from "@/lib/toast";
 import { useConfirm } from "@/lib/confirm";
 import { formatPhone } from "@/lib/utils";
@@ -948,7 +949,7 @@ function Editor({
             <div className="grid sm:grid-cols-3 gap-3">
               <div className="sm:col-span-1">
                 <label className={label}>{repeat === "none" ? "Send at" : "Starting"}</label>
-                <input type="datetime-local" className={field} value={when} onChange={(e) => setWhen(e.target.value)} />
+                <DateTimePicker value={when} onChange={setWhen} quickDates />
               </div>
               <div>
                 <label className={label}>Repeat</label>
@@ -961,7 +962,7 @@ function Editor({
               {repeat !== "none" && (
                 <div>
                   <label className={label}>Ends <span className="font-normal text-fg-subtle">(optional)</span></label>
-                  <input type="date" className={field} value={until} onChange={(e) => setUntil(e.target.value)} />
+                  <DateTimePicker dateOnly clearable value={until} onChange={setUntil} placeholder="No end date" />
                 </div>
               )}
             </div>

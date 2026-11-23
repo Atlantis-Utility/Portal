@@ -14,7 +14,7 @@ const POINTS = [
  */
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-canvas grid lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+    <div className="min-h-screen bg-canvas grid grid-cols-1 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
       <aside className="relative hidden lg:flex flex-col justify-between overflow-hidden border-r border-line bg-surface p-12">
         {/* A soft mesh of the app's accent colours. */}
         <div
@@ -71,7 +71,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <p className="relative text-xs text-fg-subtle">Ventura County, California</p>
       </aside>
 
-      <main className="flex items-center justify-center p-4 sm:p-8">{children}</main>
+      <main className="min-w-0 flex items-center justify-center p-4 sm:p-8">{children}</main>
     </div>
   );
 }

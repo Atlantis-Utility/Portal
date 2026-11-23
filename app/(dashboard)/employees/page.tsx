@@ -160,7 +160,7 @@ export default function EmployeesPage() {
 
       {/* Table */}
       <div className="bg-white border border-[#eaeaea] rounded-xl overflow-x-auto">
-        <table className="w-full min-w-140">
+        <table className="w-full min-w-180">
           <thead>
             <tr className="border-b border-[#eaeaea] bg-[#fafafa]">
               <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">

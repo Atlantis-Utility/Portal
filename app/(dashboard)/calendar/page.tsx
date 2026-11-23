@@ -203,7 +203,7 @@ export default function CalendarPage() {
   // normally instead of being pinned to the viewport height.
   return (
     <div className="flex flex-col lg:h-full">
-      <div className="shrink-0 flex items-center h-10 -mt-3 md:-mt-4">
+      <div className="shrink-0">
         <Header title="Calendar" className="mb-0" />
       </div>
 
@@ -283,7 +283,21 @@ export default function CalendarPage() {
                 >
                   {d.getDate()}
                 </span>
-                <div className="mt-0.5 space-y-0.5 min-h-0 overflow-hidden">
+                {/* On a phone a day is ~50px wide: labels would be two letters,
+                    so it shows a dot per event instead, and tapping the day
+                    lists them in the panel below. */}
+                {allItems.length > 0 && (
+                  <div className="sm:hidden flex items-center gap-0.5 mt-1 px-0.5">
+                    {allItems.slice(0, 3).map((item) => (
+                      <span
+                        key={item.kind === "meeting" ? item.card.id : item.event.id}
+                        className={`w-1.5 h-1.5 rounded-full ${item.kind === "meeting" ? "bg-ink-blue" : "bg-ink-indigo"}`}
+                      />
+                    ))}
+                    {allItems.length > 3 && <span className="text-[8px] text-[#999] leading-none ml-0.5">+{allItems.length - 3}</span>}
+                  </div>
+                )}
+                <div className="hidden sm:block mt-0.5 space-y-0.5 min-h-0 overflow-hidden">
                   {visible.map((item) =>
                     item.kind === "meeting" ? (
                       <button

@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MS_USER_SCOPES } from "@/lib/microsoft/scopes";
+import { requestOrigin } from "@/lib/app-origin";
 
 export async function GET(req: NextRequest) {
+  // Same origin the connect route sent Microsoft, so the two redirect_uri
+  // values match and the cookie lands on the site the person is using.
+  const origin = requestOrigin(req);
   const code = req.nextUrl.searchParams.get("code");
 
   if (!code) {
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/calendar?outlook=error`
+      `${origin}/calendar?outlook=error`
     );
   }
 
@@ -21,7 +25,7 @@ export async function GET(req: NextRequest) {
         client_secret: process.env.MS_CALENDAR_CLIENT_SECRET!,
         grant_type:    "authorization_code",
         code,
-        redirect_uri:  `${process.env.NEXT_PUBLIC_APP_URL}/api/outlook-calendar/callback`,
+        redirect_uri:  `${origin}/api/outlook-calendar/callback`,
         scope:         MS_USER_SCOPES,
       }),
       cache: "no-store",
@@ -36,7 +40,7 @@ export async function GET(req: NextRequest) {
     }
 
     const res = NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/calendar?outlook=connected`
+      `${origin}/calendar?outlook=connected`
     );
 
     res.cookies.set("outlook_refresh", tokens.refresh_token, {
@@ -62,7 +66,7 @@ export async function GET(req: NextRequest) {
       console.error("[outlook-calendar:callback] unexpected failure", err);
     }
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/calendar?outlook=error`
+      `${origin}/calendar?outlook=error`
     );
   }
 }

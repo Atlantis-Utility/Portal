@@ -127,6 +127,11 @@ export interface SmsMessage {
    * owner.
    */
   sentFromErp?: boolean;
+  /**
+   * The browser's own copy of an attachment just sent from here, shown
+   * until RingLogix lists the real message (which has no id to fetch yet).
+   */
+  localPreview?: string;
 }
 
 /**

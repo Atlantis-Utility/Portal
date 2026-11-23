@@ -335,6 +335,69 @@ export async function sendMessage(opts: {
 }
 
 /**
+ * The PBX's own API, v2, on the core server rather than the v1 gateway.
+ *
+ * The gateway (api.ringlogix.com/pbx/v1) has no way to attach a file:
+ * `upload/create` answers nothing and `upload_id` goes undocumented. The
+ * core server runs NetSapiens v2, which takes the file inline in the send
+ * itself, and our gateway token is accepted there unchanged (verified
+ * 2026-11-23, NetSapiens 44.4.8). It's the host every received attachment's
+ * `remotepath` already points at.
+ */
+const RINGLOGIX_CORE_BASE = (process.env.RINGLOGIX_CORE_URL || "https://core2-mia.ringlogix.com").replace(/\/+$/, "") + "/ns-api/v2";
+
+/**
+ * Sends a picture or file into an existing conversation: an MMS to numbers
+ * outside, or a media chat to a colleague's extension.
+ *
+ * v2 requires `message` (at least one character), so a file sent on its own
+ * carries a single space. Answers 202 with no id - the caller finds the
+ * stored message by reading the conversation back.
+ */
+export async function sendMedia(opts: {
+  domain: string;
+  user: string;
+  sessionId: string;
+  /** Numbers (a group lists several), or one extension for a chat. */
+  destination: string[];
+  message: string;
+  /** Our number, for an MMS. Omit for an internal media chat. */
+  fromNumber?: string;
+  file: { data: Buffer; mimeType: string };
+}) {
+  if (!isConfigured()) throw new Error("RINGLOGIX_NOT_CONFIGURED");
+  const { token, type } = await getToken();
+  const body: Record<string, unknown> = {
+    type: opts.fromNumber ? "mms" : "chat-media",
+    message: opts.message.trim() || " ",
+    destination: opts.destination.length === 1 ? opts.destination[0] : opts.destination,
+    data: opts.file.data.toString("base64"),
+    "mime-type": opts.file.mimeType,
+    size: opts.file.data.length,
+  };
+  if (opts.fromNumber) body["from-number"] = opts.fromNumber;
+
+  const path = `/domains/${encodeURIComponent(opts.domain)}/users/${encodeURIComponent(opts.user)}` +
+    `/messagesessions/${encodeURIComponent(opts.sessionId)}/messages`;
+  const res = await fetch(RINGLOGIX_CORE_BASE + path, {
+    method: "POST",
+    headers: { Authorization: `${type} ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    let reason = res.headers.get("warning") ?? "";
+    if (!reason) {
+      try { reason = String(JSON.parse(text).message ?? ""); } catch { reason = text.slice(0, 300); }
+    }
+    throw new RingLogixError("message", "create-media", res.status, reason);
+  }
+  invalidate("rl:messagesession");
+  invalidate("rl:message:");
+}
+
+/**
  * Marks a conversation read or unread.
  *
  * Written through to the PBX rather than kept locally, so that marking

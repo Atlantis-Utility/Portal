@@ -112,6 +112,40 @@ function fileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** What the server accepts (it checks again), and what phones can take. */
+const ATTACH_ACCEPT = "image/*,video/mp4,video/3gpp,video/quicktime,audio/*,application/pdf,text/vcard,.vcf";
+const ATTACH_MAX = 3.5 * 1024 * 1024;
+
+/**
+ * Shrinks a large photo before it goes anywhere.
+ *
+ * A phone camera's 4 MB JPEG is past what most carriers will deliver by
+ * MMS; 1600 px on the long side at JPEG 0.82 is a few hundred KB and still
+ * looks sharp on the phone receiving it. GIFs (they'd lose their motion),
+ * small pictures and anything the browser can't draw are left alone.
+ */
+async function shrinkForMms(file: File): Promise<File> {
+  if (!/^image\/(jpeg|png|webp|bmp)$/.test(file.type) || file.size <= 900 * 1024) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.fillStyle = "#fff"; // a transparent PNG becomes JPEG on white, not black
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((ok) => canvas.toBlob(ok, "image/jpeg", 0.82));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}
+
 /** A colleague by name, a customer by company, anyone else by number. */
 function partyName(
   c: SmsConversation,
@@ -166,6 +200,11 @@ function Thread({
   const [error, setError] = useState("");
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  // A picture or file waiting to go with the next reply, with a preview URL
+  // for pictures.
+  const [attachment, setAttachment] = useState<{ file: File; preview: string } | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const picker = useRef<HTMLInputElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   // Messages sent from here that RingLogix hasn't listed back yet. Kept
@@ -194,7 +233,9 @@ function Thread({
         // A reply we are still waiting to see listed stays on screen until
         // the server's copy of it turns up, matched on its text.
         pending.current = pending.current.filter(
-          (p) => !server.some((m) => m.direction === "out" && m.text === p.text),
+          (p) => !server.some(
+            (m) => m.direction === "out" && m.text.trim() === p.text.trim() && m.hasMedia === p.hasMedia && m.at >= p.at - 120_000,
+          ),
         );
         setMessages([...server, ...pending.current].sort((a, b) => a.at - b.at));
         setError("");
@@ -238,24 +279,64 @@ function Thread({
     if (wasAtBottom.current) bottom.current?.scrollIntoView({ block: "end" });
   }, [loading, count]);
 
+  async function attach(picked: File | null | undefined) {
+    if (!picked) return;
+    setPreparing(true);
+    try {
+      const file = await shrinkForMms(picked);
+      if (file.size > ATTACH_MAX) {
+        toast.error(`That file is ${fileSize(file.size)}; the limit is 3.5 MB.`);
+        return;
+      }
+      if (attachment?.preview) URL.revokeObjectURL(attachment.preview);
+      setAttachment({ file, preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : "" });
+    } finally {
+      setPreparing(false);
+    }
+  }
+
+  function clearAttachment() {
+    if (attachment?.preview) URL.revokeObjectURL(attachment.preview);
+    setAttachment(null);
+  }
+
   async function send() {
     const text = draft.trim();
-    if (!text || sending) return;
+    if ((!text && !attachment) || sending || preparing) return;
     setSending(true);
+    const sentFile = attachment;
     try {
-      const res = await fetch("/api/ringlogix/messages/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: conversation.sessionId,
-          user: conversation.user,
-          domain: conversation.domain,
-          text,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message ?? data.error ?? "Couldn't send that");
+      let res: Response;
+      if (sentFile) {
+        // A file goes as a form; the server still looks the destination up.
+        const form = new FormData();
+        form.append("sessionId", conversation.sessionId);
+        form.append("user", conversation.user);
+        form.append("text", text);
+        form.append("file", sentFile.file);
+        res = await fetch("/api/ringlogix/messages/send", { method: "POST", body: form });
+      } else {
+        res = await fetch("/api/ringlogix/messages/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: conversation.sessionId,
+            user: conversation.user,
+            domain: conversation.domain,
+            text,
+          }),
+        });
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          data.message ?? data.error ?? (res.status === 413 ? "That file is too large to send." : "Couldn't send that"),
+        );
+      }
       setDraft("");
+      // The preview URL now belongs to the echo below, until RingLogix lists
+      // the real message.
+      setAttachment(null);
       wasAtBottom.current = true;
       // Shown straight away rather than waiting for RingLogix to list it:
       // a reply that takes a minute to appear is a reply people send twice.
@@ -272,9 +353,10 @@ function Thread({
           to: conversation.remote,
         text,
         status: "",
-        mediaType: "",
-        mediaSize: 0,
-        hasMedia: false,
+        mediaType: sentFile?.file.type ?? "",
+        mediaSize: sentFile?.file.size ?? 0,
+        hasMedia: Boolean(sentFile),
+        localPreview: sentFile?.preview || undefined,
       };
       pending.current = [...pending.current, echo];
       setMessages((prev) => [...prev, echo]);
@@ -353,13 +435,22 @@ function Thread({
                   }`}
                 >
                   {m.hasMedia && (() => {
-                    const src = `/api/ringlogix/messages/media?${new URLSearchParams({
+                    const src = (m.localPreview || m.id.startsWith("local-")) ? (m.localPreview ?? "") : `/api/ringlogix/messages/media?${new URLSearchParams({
                       domain: conversation.domain,
                       user: conversation.user,
                       session: conversation.sessionId,
                       id: m.id,
                     })}`;
                     const isImage = m.mediaType.startsWith("image/");
+                    // Just sent, and not a picture: there's nothing to open yet.
+                    if (!src) {
+                      return (
+                        <span className="mb-1.5 flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs bg-white border border-[#eaeaea]">
+                          <Paperclip className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{m.mediaType || "Attachment"}{m.mediaSize ? ` · ${fileSize(m.mediaSize)}` : ""}</span>
+                        </span>
+                      );
+                    }
                     return isImage ? (
                       <a href={src} target="_blank" rel="noopener noreferrer" className="block mb-1.5">
                         {/* Not next/image: the bytes come through our own
@@ -406,7 +497,46 @@ function Thread({
           it - the route looks the destination up rather than trusting the
           browser, so nothing here can text a stranger. */}
       <div className="border-t border-[#eaeaea] p-3 shrink-0">
+        {attachment && (
+          <div className="mb-2 flex items-center gap-2.5 rounded-xl border border-[#eaeaea] bg-[#fafafa] p-2 w-fit max-w-full">
+            {attachment.preview ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={attachment.preview} alt="" className="w-12 h-12 rounded-lg object-cover bg-white" />
+            ) : (
+              <span className="w-12 h-12 rounded-lg bg-white border border-[#eaeaea] flex items-center justify-center">
+                <Paperclip className="w-4 h-4 text-[#666]" />
+              </span>
+            )}
+            <span className="min-w-0">
+              <span className="block text-[13px] text-[#0a0a0a] truncate max-w-56">{attachment.file.name}</span>
+              <span className="block text-[11px] text-[#999]">{fileSize(attachment.file.size)} · sends as MMS</span>
+            </span>
+            <button
+              onClick={clearAttachment}
+              disabled={sending}
+              data-tip="Remove"
+              className="ml-1 w-7 h-7 flex items-center justify-center rounded-md text-[#666] hover:bg-[#eaeaea] disabled:opacity-40"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
         <div className="flex items-end gap-2">
+          <input
+            ref={picker}
+            type="file"
+            accept={ATTACH_ACCEPT}
+            className="hidden"
+            onChange={(e) => { attach(e.target.files?.[0]); e.target.value = ""; }}
+          />
+          <button
+            onClick={() => picker.current?.click()}
+            disabled={sending || preparing}
+            data-tip="Attach a picture or file"
+            className="flex items-center justify-center w-10 h-10 border border-[#eaeaea] bg-white text-[#444] rounded-xl hover:bg-[#fafafa] transition-colors disabled:opacity-40"
+          >
+            {preparing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+          </button>
           <textarea
             rows={1}
             value={draft}
@@ -416,7 +546,13 @@ function Thread({
               // messaging app does, and what fingers expect.
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
             }}
-            placeholder={`Reply to ${them}…`}
+            onPaste={(e) => {
+              // A pasted screenshot attaches, the way it does in a phone's
+              // own messaging app.
+              const pasted = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
+              if (pasted) { e.preventDefault(); attach(pasted); }
+            }}
+            placeholder={attachment ? "Add a message (optional)…" : `Reply to ${them}…`}
             className="flex-1 resize-none text-sm bg-[#fafafa] border border-[#eaeaea] rounded-xl px-3.5 py-2.5 max-h-32 outline-none focus:border-[#0a0a0a] focus:bg-white transition-colors"
           />
           {onSchedule && (
@@ -430,7 +566,7 @@ function Thread({
           )}
           <button
             onClick={send}
-            disabled={!draft.trim() || sending}
+            disabled={(!draft.trim() && !attachment) || sending || preparing}
             data-tip="Send (Enter)"
             className="flex items-center justify-center w-10 h-10 bg-[#0070f3] text-white rounded-xl hover:bg-[#0060df] transition-colors disabled:opacity-30"
           >

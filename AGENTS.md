@@ -51,9 +51,17 @@ with **Reseller** scope, plus a separate API application. Hard-won facts:
   guessing further on the live PBX.
 - Group senders: an inbound message in a group carries the individual
   sender in `from_num`.
-- Still refused: `domain/read`, `reseller/read`, media upload
-  (`upload_id` — the shape is undocumented and `upload/create` returns
-  nothing), and there is no webhook, so Messages polls.
+- **MMS goes through v2, not the gateway.** The v1 gateway can't attach a
+  file (`upload/create` returns nothing). The core server
+  `core2-mia.ringlogix.com/ns-api/v2` (`RINGLOGIX_CORE_URL`) accepts our
+  gateway token unchanged and takes the file inline: `POST
+  /domains/{d}/users/{u}/messagesessions/{sid}/messages` with JSON `type:
+  "mms"`, `from-number`, `destination`, base64 `data`, `mime-type`, `size`
+  (`sendMedia`). Session ids are the same in v1 and v2. It answers 202 with
+  no id, `message` must be non-empty, 409 = everyone opted out, 415 = the
+  carrier refuses the file type. Verified 2026-11-23.
+- Still refused: `domain/read`, `reseller/read`, and there is no webhook,
+  so Messages polls.
 
 **Microsoft** signs people in (Supabase `azure` provider) and provides the
 calendar. The refresh token lands in the `outlook_refresh` cookie. Every

@@ -111,10 +111,10 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen = false, onMob
           {collapsed ? (
             // The full name doesn't fit the 64px rail, so it shortens to
             // initials rather than falling back to the mark.
-            <p className="mx-auto text-base font-semibold text-[#0a0a0a] leading-none" data-tip="Atlantis Utility">AU</p>
+            <p className="mx-auto text-base font-semibold text-[#0a0a0a] leading-none" data-tip="Atlantis Portal">AU</p>
           ) : (
             <div className="flex items-center justify-between w-full">
-              <p className="text-base font-semibold text-[#0a0a0a] leading-none whitespace-nowrap">Atlantis Utility</p>
+              <p className="text-base font-semibold text-[#0a0a0a] leading-none whitespace-nowrap">Atlantis Portal</p>
               {/* Mobile close button */}
               <button
                 onClick={onMobileClose}

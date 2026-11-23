@@ -4,7 +4,7 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-# Atlantis Desk
+# Atlantis Portal
 
 A messaging-first workspace for Atlantis Utility, a VoIP/ISP reseller in
 Ventura County, CA. Split out of their ERP on 2026-11-22, because the

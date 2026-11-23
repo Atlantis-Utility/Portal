@@ -87,7 +87,7 @@ function SetPasswordForm() {
             <path d="M8 2L14 13H2L8 2Z" fill="white" fillOpacity="0.9" />
           </svg>
         </div>
-        <span className="text-[17px] font-semibold text-[#0a0a0a] tracking-tight">Atlantis Utility</span>
+        <span className="text-[17px] font-semibold text-[#0a0a0a] tracking-tight">Atlantis Portal</span>
       </div>
 
       <div className="bg-white border border-[#eaeaea] rounded-2xl p-8 shadow-sm">

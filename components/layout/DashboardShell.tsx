@@ -120,7 +120,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             <Menu className="w-5 h-5 text-[#0a0a0a]" />
           </button>
           <div className="flex items-center gap-2 ml-2 flex-1">
-            <span className="text-[13px] font-semibold text-[#0a0a0a]">Atlantis Utility</span>
+            <span className="text-[13px] font-semibold text-[#0a0a0a]">Atlantis Portal</span>
           </div>
           <div className="flex items-center gap-1">
             <Link href={notificationsHref} className="relative p-1.5 rounded-lg hover:bg-[#f5f5f5] transition-colors" aria-label="Notifications">

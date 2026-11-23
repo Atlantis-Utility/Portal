@@ -1,4 +1,4 @@
-# Atlantis Desk
+# Atlantis Portal
 
 A messaging-first workspace: the shared SMS inbox, with the people and
 work around it. Split out of the Atlantis ERP so that it can grow in its

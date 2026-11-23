@@ -53,7 +53,7 @@ function AppearanceTab({ onSave }: { onSave: (msg: string) => void }) {
     <div className="space-y-5">
       <div className="bg-white border border-[#eaeaea] rounded-xl p-6">
         <p className="text-sm font-semibold text-[#0a0a0a] mb-1">Theme</p>
-        <p className="text-xs text-[#999] mb-5">Choose how Atlantis Utility looks for you.</p>
+        <p className="text-xs text-[#999] mb-5">Choose how Atlantis Portal looks for you.</p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-sm">
           {/* Light */}

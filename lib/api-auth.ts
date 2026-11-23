@@ -1,4 +1,6 @@
 import { createClient, createServiceRoleClient } from "./supabase/server";
+import { PAGE_OPTIONS, defaultPageOptions } from "./page-options";
+import { hasPageAccess } from "./nav-pages";
 
 export class ApiAuthError extends Error {
   status: number;
@@ -93,4 +95,33 @@ export async function requireEmployee(): Promise<EmployeeActor> {
 
   const row = employee as { id: string; name: string };
   return { uid: user.id, email, employeeId: row.id, name: row.name };
+}
+
+/**
+ * Verifies the caller works here, holds the page an option belongs to, and
+ * holds the option itself (lib/page-options.ts).
+ *
+ * Read the same way auth-context.tsx reads it, so the server and the UI
+ * agree: a saved list decides; with none saved, an administrator holds
+ * every option and anyone else holds none.
+ */
+export async function requirePageOption(key: string): Promise<EmployeeActor> {
+  const actor = await requireEmployee();
+  const option = PAGE_OPTIONS.find((o) => o.key === key);
+  if (!option) throw new ApiAuthError("Unknown permission", 500);
+
+  const { data } = await createServiceRoleClient()
+    .from("employees")
+    .select("data")
+    .eq("id", actor.employeeId)
+    .maybeSingle();
+  const record = (data?.data ?? {}) as { accessRole?: string; access?: string[]; pageOptions?: string[] };
+  const unrestricted = record.accessRole === "Administrator";
+  const access = record.access ?? (unrestricted ? undefined : []);
+  const options = record.pageOptions ?? defaultPageOptions(unrestricted);
+
+  if (!hasPageAccess(option.page, access) || !options.includes(key)) {
+    throw new ApiAuthError(`You need the "${option.label}" permission for this.`, 403);
+  }
+  return actor;
 }

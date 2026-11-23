@@ -31,7 +31,33 @@ projects, inventory, vault and UniFi along with it.
    - `supabase/migration-employees-only-login.sql`
    - `supabase/migration-message-threads.sql`
    - `supabase/migration-message-senders.sql`
+   - `supabase/migration-workflows.sql`
 5. `npm run dev`
+
+## Scheduled messages (workflows)
+
+Texts that go out later or on a repeat, set up from Messages by anyone
+holding the **Schedule messages** option (Edit Profile, under Messages).
+Built as workflows, a trigger plus an action, so later automations add
+triggers and actions rather than tables. Code is in `lib/workflows/`.
+
+| Setting | What it does |
+|---|---|
+| `SCHEDULED_SMS_MODE` | Sending is **off** unless this is exactly `live`. Otherwise every run is a rehearsal: all checks run and the history shows who *would* have been texted, but nothing is sent. |
+| `SCHEDULED_SMS_DAILY_CAP` | Most automated texts sent per day (Pacific), across all schedules. Default 200. |
+| `CRON_SECRET` | The timer's password for `/api/cron/workflows`. Unset, the route refuses everything. |
+
+The timer is a Supabase `pg_cron` job that calls the app every minute. It
+needs the app's public address, so it is set up after deployment: the SQL
+is at the bottom of `migration-workflows.sql`. Locally, a run can be
+triggered by hand:
+
+    curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/workflows
+
+Safeguards: someone who has texted STOP is skipped; a run more than two
+hours late is recorded as missed instead of sent; a repeat that missed
+several runs fires once at its next slot, never in a burst; two timers
+firing at once can't both send the same run.
 
 `schema.sql` still creates a few tables this app has no pages for
 (projects, tickets, vault). They are harmless, and leaving them means the

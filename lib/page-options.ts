@@ -29,10 +29,15 @@ export interface PageOption {
 
 
 
-// None yet in this app. The mechanism is kept because a page option
-// is the natural way to split a page's powers, and the first one will
-// want it already here rather than invented in a hurry.
-export const PAGE_OPTIONS: PageOption[] = [];
+export const PAGE_OPTIONS: PageOption[] = [
+  {
+    // Kept in step with SCHEDULE_OPTION in lib/workflows/types.ts.
+    key: "messages.schedule",
+    page: "/messages",
+    label: "Schedule messages",
+    hint: "Set up texts that go out later or on a repeat, unattended, to real customers.",
+  },
+];
 
 export const ALL_PAGE_OPTIONS: string[] = PAGE_OPTIONS.map((o) => o.key);
 

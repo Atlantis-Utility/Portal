@@ -15,6 +15,9 @@ import {
 } from "@/lib/db/message-threads";
 import { MESSAGE_TAGS, knownTags } from "@/lib/message-tags";
 import Avatar from "@/components/messages/Avatar";
+import ScheduledMessages, { type SchedulePrefill } from "@/components/messages/ScheduledMessages";
+import { SCHEDULE_OPTION } from "@/lib/workflows/types";
+import { CalendarClock } from "lucide-react";
 import type { SmsConversation, SmsMessage } from "@/lib/ringlogix-messages";
 
 type ViewState = "loading" | "unconfigured" | "denied" | "error" | "ok";
@@ -110,8 +113,10 @@ function partyName(
 // ── The conversation ────────────────────────────────────────────────────
 
 function Thread({
-  conversation, customer, names, meExtension, meName, onSent,
+  conversation, customer, names, meExtension, meName, onSent, onSchedule,
 }: {
+  /** Opens the scheduler aimed at this conversation. Absent without the grant. */
+  onSchedule?: (draft: string) => void;
   conversation: SmsConversation;
   customer: string;
   names: Record<string, string>;
@@ -366,6 +371,15 @@ function Thread({
             placeholder={`Reply to ${them}…`}
             className="flex-1 resize-none text-sm bg-[#fafafa] border border-[#eaeaea] rounded-xl px-3.5 py-2.5 max-h-32 outline-none focus:border-[#0a0a0a] focus:bg-white transition-colors"
           />
+          {onSchedule && (
+            <button
+              onClick={() => onSchedule(draft)}
+              data-tip="Send later, or on a repeat"
+              className="flex items-center justify-center w-10 h-10 border border-[#eaeaea] bg-white text-[#444] rounded-xl hover:bg-[#fafafa] transition-colors"
+            >
+              <CalendarClock className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={send}
             disabled={!draft.trim() || sending}
@@ -946,6 +960,9 @@ export default function MessagesPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [showDetails, setShowDetails] = useState(true);
+  // The scheduler, when open; prefill when it was opened from a thread.
+  const [scheduling, setScheduling] = useState<{ prefill: SchedulePrefill | null } | null>(null);
+  const canSchedule = Boolean(authUser?.pageOptions?.includes(SCHEDULE_OPTION));
   // Below lg there is no room for a third column, so the details take
   // over the conversation pane instead - with its own state, or opening
   // the rail on a desktop would hide the thread on a phone.
@@ -1170,6 +1187,17 @@ export default function MessagesPage() {
     // is 100vh with a bar and its own padding. dvh on small screens,
     // where the browser's own chrome comes and goes as you scroll.
     <div className="flex flex-col h-[calc(100dvh-11.5rem)] md:h-[calc(100vh-7.5rem)] min-h-125 md:min-h-0">
+      {scheduling && (
+        <ScheduledMessages
+          conversations={conversations.map((c) => ({
+            sessionId: c.sessionId, user: c.user, label: nameFor(c), isGroup: c.isGroup,
+          }))}
+          contacts={Object.entries(contacts).map(([number, info]) => ({ number, name: info.name }))}
+          senders={senders}
+          prefill={scheduling.prefill}
+          onClose={() => setScheduling(null)}
+        />
+      )}
       <div className="flex items-start justify-between gap-3 mb-4 shrink-0">
         <div className="min-w-0">
           <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-[#0a0a0a]">Messages</h1>
@@ -1181,6 +1209,17 @@ export default function MessagesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {canSchedule && (
+            <button
+              onClick={() => setScheduling({ prefill: null })}
+              disabled={state !== "ok"}
+              data-tip="Texts set to go out later or on a repeat"
+              className="flex items-center gap-2 border border-[#eaeaea] bg-white text-sm font-medium text-[#0a0a0a] px-3.5 h-9 rounded-lg hover:bg-[#fafafa] transition-colors disabled:opacity-50"
+            >
+              <CalendarClock className="w-4 h-4" />
+              <span className="hidden sm:inline">Scheduled</span>
+            </button>
+          )}
           <button
             onClick={() => setShowDetails((v) => !v)}
             data-tip={showDetails ? "Hide notes and tags" : "Show notes and tags"}
@@ -1511,6 +1550,11 @@ export default function MessagesPage() {
                       meExtension={meExtension}
                       meName={authUser?.displayName ?? ""}
                       onSent={() => load(true)}
+                      onSchedule={canSchedule
+                        ? (draft) => setScheduling({
+                            prefill: { sessionId: current.sessionId, user: current.user, label: nameFor(current), text: draft },
+                          })
+                        : undefined}
                     />
                   </div>
                 </>

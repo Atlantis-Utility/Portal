@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
 import { getContacts, getMessageSessions, getSubscribers, isConfigured, ourDomain } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
 import {
@@ -55,6 +56,16 @@ async function everyExtension(domain: string): Promise<RawMessageSession[]> {
 }
 
 export async function GET(req: NextRequest) {
+  // The whole shared mailbox: every number, every conversation. This route
+  // answered anyone who asked until the check below was added, because
+  // proxy.ts deliberately leaves /api/* to check for itself.
+  try {
+    await requireEmployee();
+  } catch (err) {
+    if (err instanceof ApiAuthError) return NextResponse.json({ error: err.message }, { status: err.status });
+    throw err;
+  }
+
   if (!isConfigured()) {
     return NextResponse.json({ error: "not_configured" }, { status: 503 });
   }

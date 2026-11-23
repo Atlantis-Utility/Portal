@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
 import { getMessages, getSubscribers, isConfigured, ourDomain } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
 import {
@@ -11,6 +12,15 @@ export const dynamic = "force-dynamic";
 
 /** One conversation, oldest message first. */
 export async function GET(req: NextRequest) {
+  // Every message in a conversation. proxy.ts leaves /api/* to check for
+  // itself, and this route didn't until now.
+  try {
+    await requireEmployee();
+  } catch (err) {
+    if (err instanceof ApiAuthError) return NextResponse.json({ error: err.message }, { status: err.status });
+    throw err;
+  }
+
   if (!isConfigured()) {
     return NextResponse.json({ error: "not_configured" }, { status: 503 });
   }

@@ -24,4 +24,11 @@
  * each person, the next time they sign in. That is the only cost of
  * changing this line.
  */
-export const MS_USER_SCOPES = "email offline_access Calendars.Read";
+//
+// `openid` is required, not decoration: Microsoft refuses any request that
+// asks for `email` without it (AADSTS70011). Supabase adds it to its own
+// sign-in, which hid the problem; the calendar connect route talks to
+// Microsoft directly and was refused once its redirect_uri was fixed.
+// It's the basic sign-in permission, so it adds nothing to the consent
+// screen.
+export const MS_USER_SCOPES = "openid email offline_access Calendars.Read";

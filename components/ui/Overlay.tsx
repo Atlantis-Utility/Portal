@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * The backdrop a modal sits on, which dismisses it.
@@ -8,6 +9,11 @@ import { useEffect, type ReactNode } from "react";
  * Twelve of the app's nineteen overlays had no way out but their own X, so
  * clicking beside one did nothing and Escape did nothing. Both are reflexes,
  * and a dialog that ignores them feels stuck.
+ *
+ * Rendered into <body>, not where it's used. The shell puts page content in
+ * its own layer beneath the top bar and sidebar, and a modal opened inside a
+ * page inherited that: the bar and sidebar drew over it, cutting off its
+ * header. From <body> it sits above everything, whoever opens it.
  *
  * The click test is `target === currentTarget`, so only the backdrop itself
  * counts. The alternative, stopping propagation on the panel, breaks
@@ -39,7 +45,7 @@ export default function Overlay({
     return () => document.removeEventListener("keydown", onKey);
   }, [onDismiss, dismissable]);
 
-  return (
+  const layer = (
     <div
       className={className}
       onClick={(e) => {
@@ -49,4 +55,5 @@ export default function Overlay({
       {children}
     </div>
   );
+  return typeof document === "undefined" ? layer : createPortal(layer, document.body);
 }

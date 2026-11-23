@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 interface DrawerProps {
@@ -37,7 +38,9 @@ export default function Drawer({
 
   if (!open) return null;
 
-  return (
+  // Into <body>, like Overlay: from inside a page the shell's top bar and
+  // sidebar would draw over it.
+  const layer = (
     <div className="fixed inset-0 z-50 flex">
       {/* Backdrop */}
       <div
@@ -76,5 +79,6 @@ export default function Drawer({
         )}
       </div>
     </div>
-  );
+);
+  return typeof document === "undefined" ? layer : createPortal(layer, document.body);
 }

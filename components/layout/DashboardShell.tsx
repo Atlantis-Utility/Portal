@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
 import GlobalSearch from "./GlobalSearch";
-import { Menu, Bell, LogOut, User, ChevronDown } from "lucide-react";
+import { Menu, Bell, LogOut, User, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { getUnreadCount } from "@/lib/notifications";
 import { hasPageAccess, NAV_PAGES } from "@/lib/nav-pages";
 import { ACCENT, areaFor } from "@/lib/areas";
@@ -122,7 +122,6 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
       <Sidebar
         collapsed={collapsed}
-        onToggle={toggle}
         mobileOpen={mobileOpen}
         onMobileClose={() => setMobileOpen(false)}
         allowedHrefs={allowedHrefs}
@@ -142,6 +141,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
         {/* ── Top bar ── */}
         <header className="relative z-20 shrink-0 flex items-center gap-3 h-14 px-3 md:px-6 border-b border-line bg-surface/70 backdrop-blur-xl">
+          {/* Left: navigation toggle, then search. */}
           <button
             onClick={() => setMobileOpen(true)}
             className="md:hidden flex items-center justify-center w-9 h-9 rounded-lg text-fg hover:bg-surface-3 transition-colors"
@@ -149,23 +149,34 @@ export default function DashboardShell({ children }: { children: React.ReactNode
           >
             <Menu className="w-5 h-5" />
           </button>
-
-
-          <div className="hidden md:block flex-1 max-w-md">
+          <button
+            onClick={toggle}
+            className="hidden md:flex items-center justify-center w-9 h-9 rounded-lg text-fg-muted hover:bg-surface-3 hover:text-fg transition-colors shrink-0"
+            data-tip={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? <PanelLeftOpen className="w-4.5 h-4.5" /> : <PanelLeftClose className="w-4.5 h-4.5" />}
+          </button>
+          <div className="hidden md:block w-full max-w-md">
             <GlobalSearch allowedHrefs={allowedHrefs} />
           </div>
-          <div className="flex-1 md:hidden" />
 
-          <div className="flex items-center gap-1 shrink-0">
+          {/* Right: notifications and you, pinned to the edge. */}
+          <div className="ml-auto flex items-center gap-1 shrink-0">
             {bell}
+            <span className="hidden sm:block w-px h-6 bg-line mx-2" aria-hidden />
             <div className="relative" ref={profileRef}>
               <button
                 onClick={() => setProfileOpen((o) => !o)}
-                className="flex items-center gap-2 rounded-lg hover:bg-surface-3 pl-1 pr-1.5 py-1 transition-colors"
+                className="flex items-center gap-2.5 rounded-lg hover:bg-surface-3 pl-1 pr-2 py-1 transition-colors"
                 aria-label="Your account"
               >
-                <span className="w-7 h-7 rounded-full bg-fg flex items-center justify-center shrink-0">
-                  <span className="text-surface text-[10px] font-semibold">{initials}</span>
+                <span className="w-8 h-8 rounded-full bg-fg flex items-center justify-center shrink-0">
+                  <span className="text-surface text-[11px] font-semibold">{initials}</span>
+                </span>
+                <span className="hidden lg:block text-left min-w-0 max-w-44">
+                  <span className="block text-[13px] font-medium text-fg leading-tight truncate">{displayName}</span>
+                  <span className="block text-[11px] text-fg-subtle leading-tight truncate">{userEmail}</span>
                 </span>
                 <ChevronDown className={`hidden sm:block w-3.5 h-3.5 text-fg-subtle transition-transform ${profileOpen ? "rotate-180" : ""}`} />
               </button>
@@ -208,9 +219,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         </div>
 
         <div className="relative z-10 flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8">
-          <div className="mx-auto w-full max-w-350">
+          <div className="w-full">
             {pageLabel && (
-              <p className="text-xs text-fg-subtle mb-2">
+              <p className="text-xs text-fg-subtle mb-5">
                 Atlantis Portal <span className="mx-1 text-line-strong">/</span>{" "}
                 <span className="text-fg-muted">{pageLabel}</span>
               </p>

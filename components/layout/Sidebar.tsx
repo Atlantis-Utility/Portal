@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronLeft, ChevronRight, X, Sun, Moon } from "lucide-react";
+import { X, Sun, Moon } from "lucide-react";
 import { NAV_PAGES } from "@/lib/nav-pages";
 import { areaFor } from "@/lib/areas";
 import { useTheme } from "@/lib/theme-context";
@@ -15,7 +15,6 @@ interface NavItem {
 
 interface SidebarProps {
   collapsed: boolean;
-  onToggle: () => void;
   mobileOpen?: boolean;
   onMobileClose?: () => void;
   allowedHrefs?: string[]; // undefined = admin, show all
@@ -73,7 +72,7 @@ function NavLink({
 }
 
 export default function Sidebar({
-  collapsed, onToggle, mobileOpen = false, onMobileClose, allowedHrefs,
+  collapsed, mobileOpen = false, onMobileClose, allowedHrefs,
   userDisplayName = "", userInitials = "", userSubtext = "", unreadMessages = 0,
 }: SidebarProps) {
   const pathname = usePathname();
@@ -100,15 +99,6 @@ export default function Sidebar({
         mobileOpen ? "translate-x-0" : "-translate-x-full",
       ].join(" ")}
     >
-      {/* Desktop collapse toggle */}
-      <button
-        onClick={onToggle}
-        className="hidden md:flex absolute -right-3 top-5 w-6 h-6 rounded-full bg-surface border border-line-strong items-center justify-center shadow-sm hover:shadow-md transition-all z-50 text-fg-muted hover:text-fg"
-        data-tip={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-      >
-        {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
-      </button>
-
       <aside className="h-full w-full bg-surface border-r border-line flex flex-col overflow-hidden">
         {/* Brand */}
         <div className={`h-14 flex items-center shrink-0 ${collapsed ? "justify-center" : "px-4"}`}>

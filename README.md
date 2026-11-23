@@ -32,7 +32,30 @@ projects, inventory, vault and UniFi along with it.
    - `supabase/migration-message-threads.sql`
    - `supabase/migration-message-senders.sql`
    - `supabase/migration-workflows.sql`
+   - `supabase/migration-integrations.sql`
 5. `npm run dev`
+
+## Integrations
+
+The Integrations page (Admin section; grant it in Edit Profile) connects
+other systems. Code is in `lib/integrations/`.
+
+| Connector | Connects with | Does |
+|---|---|---|
+| HubSpot | Private app token (`crm.objects.contacts.read`) | Reads contacts on a schedule |
+| Google Sheets | A service account's JSON key; each sheet is shared with its email | Reads rows (first row = headings) on a schedule |
+| Incoming webhook | A private URL, shown once | Takes contacts POSTed as JSON: Zapier, Make, n8n, a CRM's workflow rules |
+| Outgoing webhook | A URL, optional signing secret | Posts `workflow.run`, `contacts.synced`, `webhook.received` events |
+
+Every connector only *reads* from the other system. What comes in is kept
+in `external_contacts` and names numbers in Messages and in the scheduler's
+contact picker; the phone system's own contact book wins where both name a
+number. Syncs run on the same every-minute timer as scheduled texts, each
+at its own interval (15 minutes at the shortest).
+
+`INTEGRATIONS_KEY` (64 hex characters) encrypts saved credentials. It must
+be set in every deployment, and changing it means reconnecting each
+integration.
 
 ## Scheduled messages (workflows)
 

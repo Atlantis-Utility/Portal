@@ -98,6 +98,23 @@ export async function requireEmployee(): Promise<EmployeeActor> {
 }
 
 /**
+ * Verifies the caller works here and holds a page - the same rule AuthGuard
+ * applies to the page itself, enforced again on its API.
+ */
+export async function requirePageAccess(href: string): Promise<EmployeeActor> {
+  const actor = await requireEmployee();
+  const { data } = await createServiceRoleClient()
+    .from("employees")
+    .select("data")
+    .eq("id", actor.employeeId)
+    .maybeSingle();
+  const record = (data?.data ?? {}) as { accessRole?: string; access?: string[] };
+  const access = record.access ?? (record.accessRole === "Administrator" ? undefined : []);
+  if (!hasPageAccess(href, access)) throw new ApiAuthError("You don't have access to this page.", 403);
+  return actor;
+}
+
+/**
  * Verifies the caller works here, holds the page an option belongs to, and
  * holds the option itself (lib/page-options.ts).
  *

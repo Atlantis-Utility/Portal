@@ -34,6 +34,7 @@ export const NAV_PAGES: NavPage[] = [
   { href: "/tasks",      label: "Tasks",     section: "Work"      },
   { href: "/notes",      label: "Notes",     section: "Work"      },
 
+  { href: "/integrations", label: "Integrations", section: "Admin" },
   { href: "/logs",       label: "Logs",      section: "Admin"     },
   { href: "/settings",   label: "Settings",  section: "Admin"     },
 ];

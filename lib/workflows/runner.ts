@@ -4,6 +4,7 @@ import { claimDue, finishRun, liveSentSince, recordRun } from "./store";
 import { executeSendSms, sendingIsLive, type SendResult } from "./send-sms";
 import { instantOf, nextRun, wallAt } from "./schedule";
 import type { Workflow } from "./types";
+import { emit } from "@/lib/integrations/engine";
 
 /**
  * Runs whatever has come due. Called by the timer every minute.
@@ -98,5 +99,15 @@ async function runOne(flow: Workflow, live: boolean, nowMs: number): Promise<Sen
     status: next === null ? "completed" : "active",
     runCount: flow.runCount + 1,
   });
+
+  // Tell any outgoing webhooks (a CRM, Zapier). Never fails the run.
+  await emit("workflow.run", {
+    workflow: flow.name || flow.id,
+    outcome: result.outcome,
+    live,
+    sent: result.sentCount,
+    summary: result.summary,
+    recipients: result.detail.map((d) => ({ to: d.to, ok: d.ok, note: d.error ?? d.skipped ?? "" })),
+  }).catch(() => {});
   return result;
 }

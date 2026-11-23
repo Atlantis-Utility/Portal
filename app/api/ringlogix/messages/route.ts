@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
+import { externalContactsByPhone } from "@/lib/integrations/store";
 import { getContacts, getMessageSessions, getSubscribers, isConfigured, ourDomain } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
 import {
@@ -121,6 +122,18 @@ export async function GET(req: NextRequest) {
           }
         }
       }
+    }
+
+    // Then whatever connected systems know (HubSpot, a sheet, a webhook).
+    // The phone system's own book wins where both name a number: it is the
+    // one Teams shows too. Missing tables before the migration just mean
+    // nothing extra.
+    try {
+      for (const [digits, who] of Object.entries(await externalContactsByPhone())) {
+        if (!contacts[digits]) contacts[digits] = { name: who.name, company: who.company };
+      }
+    } catch {
+      // No integrations yet.
     }
 
     // Which of our numbers can send, and from which extension. Derived

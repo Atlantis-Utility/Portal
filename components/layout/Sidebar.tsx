@@ -11,6 +11,7 @@ import {
   KanbanSquare,
   StickyNote,
   ScrollText,
+  Plug,
   Settings2,
   ChevronLeft,
   ChevronRight,
@@ -44,6 +45,7 @@ const ICONS: Record<string, React.ElementType> = {
   "/calendar":  CalendarDays,
   "/tasks":     KanbanSquare,
   "/notes":     StickyNote,
+  "/integrations": Plug,
   "/logs":      ScrollText,
 };
 

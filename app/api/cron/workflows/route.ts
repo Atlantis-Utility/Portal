@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getErrorMessage } from "@/lib/utils";
 import { timingSafeEqual } from "node:crypto";
 import { runDueWorkflows } from "@/lib/workflows/runner";
+import { runDueSyncs } from "@/lib/integrations/engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,7 +39,16 @@ async function handle(req: NextRequest) {
         report.results.map((r) => `${r.name || r.id}=${r.outcome}`).join(", "),
       );
     }
-    return NextResponse.json(report);
+    // Same minute, same timer: integrations whose sync interval has come
+    // round. A failing sync is recorded against that integration and never
+    // stops the scheduled texts above from having run.
+    let syncs: Awaited<ReturnType<typeof runDueSyncs>> = [];
+    try {
+      syncs = await runDueSyncs();
+    } catch (err) {
+      console.error("[integrations] sync run failed:", getErrorMessage(err, "unknown"));
+    }
+    return NextResponse.json({ ...report, syncs });
   } catch (err) {
     const message = getErrorMessage(err, "Run failed");
     console.error("[workflows] run failed:", message);

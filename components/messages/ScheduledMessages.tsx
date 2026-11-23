@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   CalendarClock, X, Plus, Pause, Play, Ban, Trash2, Pencil, RefreshCw, ChevronDown, ChevronRight,
-  Users, MessageSquare, FlaskConical, AlertCircle,
+  Users, MessageSquare, FlaskConical, AlertCircle, Search, MoreHorizontal, ArrowLeft, Repeat as RepeatIcon,
+  CheckCircle2, Clock, Zap, FileText, CalendarCheck, Receipt, Wrench, PartyPopper,
 } from "lucide-react";
 import Overlay from "@/components/ui/Overlay";
 import { useToast } from "@/lib/toast";
@@ -11,7 +12,7 @@ import { useConfirm } from "@/lib/confirm";
 import { formatPhone } from "@/lib/utils";
 import {
   REPEAT_LABELS, MAX_TEXT_LENGTH, MAX_GROUP,
-  type Repeat, type SmsTarget, type Workflow, type WorkflowRun,
+  type Repeat, type SmsTarget, type Workflow, type WorkflowRun, type WorkflowStatus,
 } from "@/lib/workflows/types";
 import { fromLocalInput, showTime, toLocalInput, upcomingRuns } from "@/lib/workflows/schedule";
 import { checkScheduledSms, tenDigits } from "@/lib/workflows/validate";
@@ -43,13 +44,69 @@ interface Props {
   inline?: boolean;
 }
 
-type View = { mode: "list" } | { mode: "edit"; workflow: Workflow | null };
+/** A starting point: what a template fills into a new workflow. */
+interface Template {
+  id: string;
+  name: string;
+  blurb: string;
+  icon: React.ElementType;
+  text: string;
+  repeat: Repeat;
+}
+
+const TEMPLATES: Template[] = [
+  {
+    id: "appointment", name: "Appointment reminder", icon: CalendarCheck, repeat: "none",
+    blurb: "A day-before reminder with a quick way to confirm.",
+    text: "Hi! A reminder of your appointment with Atlantis Utility tomorrow at [time]. Reply C to confirm or R to reschedule.",
+  },
+  {
+    id: "payment", name: "Payment reminder", icon: Receipt, repeat: "monthly",
+    blurb: "A friendly monthly nudge before an invoice is due.",
+    text: "Hi, a friendly reminder that your Atlantis Utility invoice is due on [date]. Questions? Just reply to this text.",
+  },
+  {
+    id: "maintenance", name: "Maintenance notice", icon: Wrench, repeat: "none",
+    blurb: "Tell customers about planned work before it happens.",
+    text: "Heads up: planned maintenance tonight from 11pm to 1am may briefly interrupt your phone service. Thanks for your patience.",
+  },
+  {
+    id: "checkin", name: "Weekly check-in", icon: RepeatIcon, repeat: "weekly",
+    blurb: "A standing weekly message to a person or group.",
+    text: "Hi! Just checking in for the week. Anything we can help with? Reply here any time.",
+  },
+  {
+    id: "holiday", name: "Holiday hours", icon: PartyPopper, repeat: "none",
+    blurb: "Let people know when the office is closed.",
+    text: "Our office will be closed on [date] for the holiday. For urgent service issues, reply URGENT and we'll get back to you.",
+  },
+];
+
+type View = { mode: "list" } | { mode: "edit"; workflow: Workflow | null; template?: Template | null };
+type Filter = "all" | WorkflowStatus;
+
+const STATUS: Record<WorkflowStatus, { label: string; dot: string; text: string }> = {
+  active:    { label: "Active",    dot: "bg-ink-green",  text: "text-ink-green" },
+  paused:    { label: "Paused",    dot: "bg-ink-amber",  text: "text-ink-amber" },
+  completed: { label: "Completed", dot: "bg-fg-subtle",  text: "text-fg-muted" },
+  canceled:  { label: "Canceled",  dot: "bg-line-strong", text: "text-fg-subtle" },
+};
+
+const OUTCOME: Record<WorkflowRun["outcome"], { label: string; text: string; dot: string }> = {
+  sent:    { label: "Sent",        text: "text-ink-green", dot: "bg-ink-green" },
+  dry_run: { label: "Test run",    text: "text-ink-amber", dot: "bg-ink-amber" },
+  partial: { label: "Partly sent", text: "text-ink-amber", dot: "bg-ink-amber" },
+  failed:  { label: "Failed",      text: "text-ink-rose",  dot: "bg-ink-rose" },
+  skipped: { label: "Skipped",     text: "text-fg-muted",  dot: "bg-fg-subtle" },
+  missed:  { label: "Missed",      text: "text-ink-rose",  dot: "bg-ink-rose" },
+};
 
 /**
- * Scheduled texts: the list, and the editor for one.
+ * Scheduled texts - the first kind of workflow: the list, and the editor.
  *
  * Everything goes through /api/workflows, which checks the "Schedule
- * messages" grant; this component only decides what to show.
+ * messages" grant; this component only decides what to show. Used as the
+ * Workflows page (inline) and as a pop-up over Messages.
  */
 export default function ScheduledMessages({ conversations, contacts, senders, prefill, onClose, inline = false }: Props) {
   const toast = useToast();
@@ -60,6 +117,8 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+  const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -68,12 +127,12 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
         const res = await fetch("/api/workflows");
         const data = await res.json();
         if (!alive) return;
-        if (!res.ok) throw new Error(data.error ?? "Couldn't load scheduled messages");
+        if (!res.ok) throw new Error(data.error ?? "Couldn't load workflows");
         setWorkflows(data.workflows ?? []);
         setLive(Boolean(data.live));
         setError("");
       } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : "Couldn't load scheduled messages");
+        if (alive) setError(e instanceof Error ? e.message : "Couldn't load workflows");
       }
     })();
     return () => { alive = false; };
@@ -84,11 +143,11 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
   async function act(flow: Workflow, what: "pause" | "resume" | "cancel" | "delete") {
     if (what === "cancel" || what === "delete") {
       const ok = await confirm({
-        title: what === "cancel" ? "Cancel this schedule?" : "Delete this schedule?",
+        title: what === "cancel" ? `Cancel “${flow.name || "this workflow"}”?` : `Delete “${flow.name || "this workflow"}”?`,
         description: what === "cancel"
           ? "Nothing more will be sent from it. Its history is kept."
           : "It and its history are removed for good.",
-        confirmLabel: what === "cancel" ? "Cancel schedule" : "Delete",
+        confirmLabel: what === "cancel" ? "Cancel workflow" : "Delete",
       });
       if (!ok) return;
     }
@@ -103,9 +162,7 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
           });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "That didn't work");
-      toast.success(
-        what === "pause" ? "Paused." : what === "resume" ? "Resumed." : what === "cancel" ? "Canceled." : "Deleted.",
-      );
+      toast.success({ pause: "Paused.", resume: "Resumed.", cancel: "Canceled.", delete: "Deleted." }[what]);
       reload();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "That didn't work");
@@ -114,96 +171,152 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
     }
   }
 
-  const frame = (children: React.ReactNode) =>
-    inline ? (
-      <div className="bg-white border border-[#eaeaea] rounded-xl flex flex-col overflow-hidden min-h-[60vh]">{children}</div>
-    ) : (
-      <Overlay
-        onDismiss={onClose ?? (() => {})}
-        className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-3 md:p-6"
-      >
-        <div className="bg-white border border-[#eaeaea] rounded-2xl shadow-xl w-full max-w-3xl h-[88vh] flex flex-col overflow-hidden">
-          {children}
-        </div>
-      </Overlay>
+  const counts = useMemo(() => {
+    const c: Record<Filter, number> = { all: 0, active: 0, paused: 0, completed: 0, canceled: 0 };
+    for (const w of workflows ?? []) { c.all++; c[w.status]++; }
+    return c;
+  }, [workflows]);
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (workflows ?? [])
+      .filter((w) => filter === "all" || w.status === filter)
+      .filter((w) => !q || w.name.toLowerCase().includes(q) || w.action.text.toLowerCase().includes(q) ||
+        describeTarget(w.action.target).toLowerCase().includes(q));
+  }, [workflows, filter, query]);
+
+  const nextUp = useMemo(
+    () => (workflows ?? [])
+      .filter((w) => w.status === "active" && w.nextRunAt)
+      .sort((a, b) => Date.parse(a.nextRunAt!) - Date.parse(b.nextRunAt!))[0] ?? null,
+    [workflows],
+  );
+
+  const totalRuns = (workflows ?? []).reduce((n, w) => n + w.runCount, 0);
+  const startNew = (template: Template | null = null) => setView({ mode: "edit", workflow: null, template });
+
+  // ── Editing ──
+  if (view.mode === "edit") {
+    const editor = (
+      <Editor
+        key={view.workflow?.id ?? view.template?.id ?? "new"}
+        workflow={view.workflow}
+        template={view.template ?? null}
+        prefill={view.workflow ? null : prefill ?? null}
+        conversations={conversations}
+        contacts={contacts}
+        senders={senders}
+        live={live}
+        onCancel={() => (prefill && !inline && onClose ? onClose() : setView({ mode: "list" }))}
+        onSaved={() => { setView({ mode: "list" }); reload(); }}
+      />
     );
+    return inline ? editor : <Modal onClose={onClose}>{editor}</Modal>;
+  }
 
-  return frame(
-    <>
-        <header className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-[#eaeaea] shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <CalendarClock className="w-4.5 h-4.5 text-[#0070f3] shrink-0" />
-            <p className="text-sm font-semibold text-[#0a0a0a] truncate">
-              {view.mode === "list" ? "Scheduled messages" : view.workflow ? "Edit scheduled message" : "New scheduled message"}
+  // ── The list ──
+  const list = (
+    <div className="space-y-5">
+      {inline && workflows !== null && workflows.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Stat label="Active" value={counts.active} icon={Zap} hint={counts.active === 1 ? "workflow running" : "workflows running"} />
+          <Stat label="Paused" value={counts.paused} icon={Pause} hint="waiting to resume" />
+          <Stat
+            label="Next run"
+            value={nextUp ? showTime(nextUp.nextRunAt).replace(/^\w+, /, "") : "—"}
+            icon={Clock}
+            hint={nextUp ? nextUp.name || nextUp.action.text.slice(0, 32) : "nothing scheduled"}
+            small
+          />
+          <Stat label="Total runs" value={totalRuns} icon={CheckCircle2} hint="across all workflows" />
+        </div>
+      )}
+
+      {!live && workflows !== null && (
+        <div className="flex items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3">
+          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-tint-amber text-ink-amber shrink-0">
+            <FlaskConical className="w-4 h-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-fg">Test mode is on</p>
+            <p className="text-[13px] text-fg-muted mt-0.5">
+              Workflows run on schedule and record exactly who they would text, but nothing is sent. An administrator
+              switches sending on in the deployment&apos;s settings.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            {view.mode === "list" && (
+        </div>
+      )}
+
+      {error ? (
+        <Panel>
+          <div className="p-10 text-center">
+            <AlertCircle className="w-6 h-6 text-ink-rose mx-auto mb-3" />
+            <p className="text-sm font-medium text-fg mb-1">Couldn&apos;t load workflows</p>
+            <p className="text-xs text-fg-muted max-w-md mx-auto">{error}</p>
+            <button onClick={reload} className="mt-4 text-xs font-medium text-fg underline underline-offset-4">Try again</button>
+          </div>
+        </Panel>
+      ) : workflows === null ? (
+        <Panel>
+          <div className="divide-y divide-line">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="px-5 py-4 flex items-center gap-4 animate-pulse">
+                <div className="h-3 w-48 rounded bg-surface-3" />
+                <div className="h-3 w-32 rounded bg-surface-3 ml-auto" />
+              </div>
+            ))}
+          </div>
+        </Panel>
+      ) : workflows.length === 0 ? (
+        <Templates onPick={startNew} />
+      ) : (
+        <Panel>
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-line">
+            <div className="flex items-center gap-1 overflow-x-auto">
+              {(["all", "active", "paused", "completed", "canceled"] as Filter[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`flex items-center gap-1.5 rounded-lg px-2.5 h-8 text-[13px] font-medium whitespace-nowrap transition-colors ${
+                    filter === f ? "bg-surface-3 text-fg" : "text-fg-muted hover:text-fg hover:bg-surface-2"
+                  }`}
+                >
+                  {f === "all" ? "All" : STATUS[f].label}
+                  <span className="text-[11px] tabular-nums text-fg-subtle">{counts[f]}</span>
+                </button>
+              ))}
+            </div>
+            <div className="relative ml-auto w-full sm:w-56">
+              <Search className="w-3.5 h-3.5 text-fg-subtle absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search workflows"
+                className="w-full h-8 text-[13px] bg-surface-2 border border-line rounded-lg pl-8 pr-3 outline-none focus:border-line-strong focus:bg-surface transition-colors"
+              />
+            </div>
+            {inline && (
               <button
-                onClick={() => setView({ mode: "edit", workflow: null })}
-                className="flex items-center gap-1.5 bg-[#0070f3] text-white text-xs font-medium rounded-lg px-3 h-8 hover:bg-[#0060df] transition-colors"
+                onClick={() => startNew()}
+                className="flex items-center gap-1.5 bg-fg text-surface text-[13px] font-medium rounded-lg px-3 h-8 hover:opacity-90 transition-opacity"
               >
-                <Plus className="w-3.5 h-3.5" /> New
-              </button>
-            )}
-            {!inline && onClose && (
-              <button
-                onClick={onClose}
-                className="flex items-center justify-center w-8 h-8 rounded-lg text-[#666] hover:bg-[#fafafa] transition-colors"
-                data-tip="Close"
-              >
-                <X className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5" /> New workflow
               </button>
             )}
           </div>
-        </header>
 
-        {!live && workflows !== null && (
-          <div className="flex items-start gap-2 px-5 py-2.5 bg-[#fefce8] border-b border-[#eaeaea] shrink-0">
-            <FlaskConical className="w-3.5 h-3.5 text-[#a16207] mt-0.5 shrink-0" />
-            <p className="text-[11px] text-[#a16207] leading-relaxed">
-              <strong>Test mode.</strong> Schedules run and record exactly who they would text, but nothing is
-              sent. Sending is switched on by an administrator in the deployment&apos;s settings.
-            </p>
+          {/* Column heads */}
+          <div className="hidden md:grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_2.5rem] gap-4 px-5 py-2.5 border-b border-line bg-surface-2 text-[11px] font-medium uppercase tracking-wider text-fg-subtle">
+            <span>Workflow</span><span>Audience</span><span>Schedule</span><span>Last run</span><span />
           </div>
-        )}
 
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          {view.mode === "edit" ? (
-            <Editor
-              key={view.workflow?.id ?? "new"}
-              workflow={view.workflow}
-              prefill={view.workflow ? null : prefill ?? null}
-              conversations={conversations}
-              contacts={contacts}
-              senders={senders}
-              live={live}
-              onCancel={() => setView({ mode: "list" })}
-              onSaved={() => { setView({ mode: "list" }); reload(); }}
-            />
-          ) : error ? (
-            <div className="p-10 text-center">
-              <AlertCircle className="w-6 h-6 text-[#f31260] mx-auto mb-3" />
-              <p className="text-sm text-[#0a0a0a] mb-1">Couldn&apos;t load scheduled messages</p>
-              <p className="text-xs text-[#999] max-w-md mx-auto">{error}</p>
-              <button onClick={reload} className="mt-3 text-xs text-[#0070f3] hover:underline">Retry</button>
-            </div>
-          ) : workflows === null ? (
-            <div className="p-10 text-center">
-              <RefreshCw className="w-5 h-5 animate-spin text-[#999] mx-auto" />
-            </div>
-          ) : workflows.length === 0 ? (
-            <div className="p-12 text-center">
-              <CalendarClock className="w-7 h-7 text-[#bbb] mx-auto mb-3" />
-              <p className="text-sm font-medium text-[#0a0a0a] mb-1">Nothing scheduled</p>
-              <p className="text-xs text-[#999] max-w-sm mx-auto">
-                Set up a text to go out later, or on a repeat: reminders, notices, follow-ups.
-              </p>
-            </div>
+          {shown.length === 0 ? (
+            <p className="px-5 py-10 text-center text-sm text-fg-muted">No workflows match.</p>
           ) : (
-            <ul className="divide-y divide-[#eaeaea]">
-              {workflows.map((w) => (
-                <Item
+            <ul className="divide-y divide-line">
+              {shown.map((w) => (
+                <Row
                   key={w.id}
                   flow={w}
                   busy={busy === w.id}
@@ -213,46 +326,104 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
               ))}
             </ul>
           )}
-        </div>
-    </>,
+        </Panel>
+      )}
+    </div>
+  );
+
+  if (inline) return list;
+
+  return (
+    <Modal
+      onClose={onClose}
+      title="Scheduled messages"
+      action={
+        <button
+          onClick={() => startNew()}
+          className="flex items-center gap-1.5 bg-fg text-surface text-xs font-medium rounded-lg px-3 h-8 hover:opacity-90 transition-opacity"
+        >
+          <Plus className="w-3.5 h-3.5" /> New
+        </button>
+      }
+    >
+      <div className="p-4">{list}</div>
+    </Modal>
   );
 }
 
-// ── One row in the list ──────────────────────────────────────────────────
+// ── Building blocks ──────────────────────────────────────────────────────
 
-const STATUS_STYLE: Record<Workflow["status"], string> = {
-  active: "bg-[#eff6ff] text-[#0070f3]",
-  paused: "bg-[#fefce8] text-[#a16207]",
-  completed: "bg-[#f0fdf4] text-[#15803d]",
-  canceled: "bg-[#f5f5f5] text-[#666]",
-};
+function Panel({ children }: { children: React.ReactNode }) {
+  return <div className="bg-surface border border-line rounded-xl overflow-hidden">{children}</div>;
+}
 
-const OUTCOME_STYLE: Record<WorkflowRun["outcome"], string> = {
-  sent: "text-[#15803d]",
-  dry_run: "text-[#a16207]",
-  partial: "text-[#a16207]",
-  failed: "text-[#b91c1c]",
-  skipped: "text-[#666]",
-  missed: "text-[#b91c1c]",
-};
+function Modal({
+  onClose, title, action, children,
+}: { onClose?: () => void; title?: string; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <Overlay onDismiss={onClose ?? (() => {})} className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-3 md:p-6">
+      <div className="bg-canvas border border-line rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden">
+        <header className="flex items-center justify-between gap-3 px-5 h-14 border-b border-line bg-surface shrink-0">
+          <p className="flex items-center gap-2 text-sm font-semibold text-fg">
+            <CalendarClock className="w-4 h-4 text-fg-muted" /> {title ?? "Workflow"}
+          </p>
+          <div className="flex items-center gap-2">
+            {action}
+            {onClose && (
+              <button onClick={onClose} className="flex items-center justify-center w-8 h-8 rounded-lg text-fg-muted hover:bg-surface-3" aria-label="Close">
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </header>
+        <div className="flex-1 min-h-0 overflow-y-auto">{children}</div>
+      </div>
+    </Overlay>
+  );
+}
 
-const OUTCOME_LABEL: Record<WorkflowRun["outcome"], string> = {
-  sent: "Sent",
-  dry_run: "Test run",
-  partial: "Partly sent",
-  failed: "Failed",
-  skipped: "Skipped",
-  missed: "Missed",
-};
+function Stat({
+  label, value, hint, icon: Icon, small = false,
+}: { label: string; value: React.ReactNode; hint: string; icon: React.ElementType; small?: boolean }) {
+  return (
+    <div className="bg-surface border border-line rounded-xl px-4 py-3.5">
+      <div className="flex items-center justify-between">
+        <p className="text-[12px] font-medium text-fg-muted">{label}</p>
+        <Icon className="w-3.5 h-3.5 text-fg-subtle" />
+      </div>
+      <p className={`mt-1.5 font-semibold tracking-tight text-fg tabular-nums truncate ${small ? "text-base" : "text-2xl"}`}>{value}</p>
+      <p className="text-[11px] text-fg-subtle mt-0.5 truncate">{hint}</p>
+    </div>
+  );
+}
 
 function describeTarget(t: SmsTarget): string {
   if (t.kind === "thread") return t.label || "A conversation";
   const names = t.numbers.map((n) => t.labels?.[n] || formatPhone(n) || n);
-  const shown = names.length > 3 ? `${names.slice(0, 3).join(", ")} +${names.length - 3}` : names.join(", ");
-  return t.mode === "group" ? `Group: ${shown}` : shown;
+  return names.length > 2 ? `${names.slice(0, 2).join(", ")} +${names.length - 2}` : names.join(", ");
 }
 
-function Item({
+function Audience({ target }: { target: SmsTarget }) {
+  const Icon = target.kind === "thread" ? MessageSquare : Users;
+  const sub = target.kind === "thread"
+    ? "Conversation"
+    : target.numbers.length === 1 ? "1 person" : `${target.numbers.length} people · ${target.mode === "group" ? "group text" : "one by one"}`;
+  return (
+    <div className="flex items-center gap-2.5 min-w-0">
+      <span className="flex items-center justify-center w-7 h-7 rounded-full bg-surface-3 text-fg-muted shrink-0">
+        <Icon className="w-3.5 h-3.5" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[13px] text-fg truncate">{describeTarget(target)}</span>
+        <span className="block text-[11px] text-fg-subtle truncate">{sub}</span>
+      </span>
+    </div>
+  );
+}
+
+// ── One row ──────────────────────────────────────────────────────────────
+
+function Row({
   flow, busy, onEdit, onAct,
 }: {
   flow: Workflow;
@@ -261,7 +432,10 @@ function Item({
   onAct: (what: "pause" | "resume" | "cancel" | "delete") => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [menu, setMenu] = useState(false);
   const [runs, setRuns] = useState<WorkflowRun[] | null>(null);
+  const status = STATUS[flow.status];
+  const done = flow.status === "completed" || flow.status === "canceled";
 
   async function toggle() {
     const next = !open;
@@ -277,92 +451,164 @@ function Item({
     }
   }
 
-  const done = flow.status === "completed" || flow.status === "canceled";
-  const btn = "flex items-center justify-center w-8 h-8 rounded-lg text-[#666] hover:bg-[#fafafa] hover:text-[#0a0a0a] transition-colors disabled:opacity-40";
+  const item = "w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] text-left transition-colors hover:bg-surface-3";
 
   return (
-    <li className="px-5 py-3.5">
-      <div className="flex items-start gap-3">
-        <button onClick={toggle} className="mt-0.5 text-[#999] hover:text-[#0a0a0a]" data-tip="History">
-          {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-        </button>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm font-medium text-[#0a0a0a] truncate">
-              {flow.name || flow.action.text.slice(0, 60)}
-            </p>
-            <span className={`text-[10px] font-medium rounded px-1.5 py-0.5 capitalize ${STATUS_STYLE[flow.status]}`}>
-              {flow.status}
+    <li className={open ? "bg-surface-2" : ""}>
+      <div className="grid grid-cols-[minmax(0,1fr)_2.5rem] md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_minmax(0,1.3fr)_minmax(0,1.1fr)_2.5rem] gap-x-4 gap-y-2 items-center px-5 py-3.5">
+        {/* Name + preview */}
+        <button onClick={toggle} className="flex items-start gap-2.5 min-w-0 text-left">
+          <span className="mt-0.5 text-fg-subtle">{open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</span>
+          <span className="min-w-0">
+            <span className="flex items-center gap-2">
+              <span className="text-sm font-medium text-fg truncate">{flow.name || "Untitled workflow"}</span>
+              <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${status.text}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} /> {status.label}
+              </span>
             </span>
-          </div>
-          <p className="text-xs text-[#666] mt-0.5 truncate">To {describeTarget(flow.action.target)}</p>
-          <p className="text-[11px] text-[#999] mt-0.5">
-            {REPEAT_LABELS[flow.trigger.repeat]}
-            {flow.trigger.until ? ` until ${flow.trigger.until}` : ""}
-            {flow.status === "active" && flow.nextRunAt ? ` · next ${showTime(flow.nextRunAt)}` : ""}
-            {flow.lastRun && (
-              <>
-                {" · last: "}
-                <span className={OUTCOME_STYLE[flow.lastRun.outcome]}>{OUTCOME_LABEL[flow.lastRun.outcome]}</span>
-                {" "}{showTime(flow.lastRun.startedAt)}
-              </>
-            )}
-          </p>
+            <span className="block text-[12px] text-fg-muted truncate mt-0.5">{flow.action.text}</span>
+          </span>
+        </button>
+
+        {/* Actions (mobile: top right) */}
+        <div className="relative md:order-last justify-self-end">
+          <button
+            onClick={() => setMenu((m) => !m)}
+            disabled={busy}
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-fg-muted hover:bg-surface-3 hover:text-fg disabled:opacity-40"
+            aria-label="Actions"
+          >
+            {busy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <MoreHorizontal className="w-4 h-4" />}
+          </button>
+          {menu && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setMenu(false)} />
+              <div className="absolute right-0 top-full mt-1 z-40 w-44 bg-surface border border-line rounded-xl shadow-xl p-1">
+                {!done && <button className={item} onClick={() => { setMenu(false); onEdit(); }}><Pencil className="w-3.5 h-3.5 text-fg-muted" /> Edit</button>}
+                {flow.status === "active" && <button className={item} onClick={() => { setMenu(false); onAct("pause"); }}><Pause className="w-3.5 h-3.5 text-fg-muted" /> Pause</button>}
+                {flow.status === "paused" && <button className={item} onClick={() => { setMenu(false); onAct("resume"); }}><Play className="w-3.5 h-3.5 text-fg-muted" /> Resume</button>}
+                <button className={item} onClick={() => { setMenu(false); toggle(); }}><FileText className="w-3.5 h-3.5 text-fg-muted" /> {open ? "Hide history" : "History"}</button>
+                {!done && <button className={`${item} text-ink-rose hover:bg-tint-rose`} onClick={() => { setMenu(false); onAct("cancel"); }}><Ban className="w-3.5 h-3.5" /> Cancel</button>}
+                {done && <button className={`${item} text-ink-rose hover:bg-tint-rose`} onClick={() => { setMenu(false); onAct("delete"); }}><Trash2 className="w-3.5 h-3.5" /> Delete</button>}
+              </div>
+            </>
+          )}
         </div>
-        <div className="flex items-center shrink-0">
-          {!done && <button onClick={onEdit} disabled={busy} className={btn} data-tip="Edit"><Pencil className="w-3.5 h-3.5" /></button>}
-          {flow.status === "active" && (
-            <button onClick={() => onAct("pause")} disabled={busy} className={btn} data-tip="Pause"><Pause className="w-3.5 h-3.5" /></button>
-          )}
-          {flow.status === "paused" && (
-            <button onClick={() => onAct("resume")} disabled={busy} className={btn} data-tip="Resume"><Play className="w-3.5 h-3.5" /></button>
-          )}
-          {!done && (
-            <button onClick={() => onAct("cancel")} disabled={busy} className={btn} data-tip="Cancel schedule"><Ban className="w-3.5 h-3.5" /></button>
-          )}
-          {done && (
-            <button onClick={() => onAct("delete")} disabled={busy} className={btn} data-tip="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+
+        <div className="col-span-2 md:col-span-1 pl-6.5 md:pl-0"><Audience target={flow.action.target} /></div>
+
+        <div className="col-span-2 md:col-span-1 pl-6.5 md:pl-0 min-w-0">
+          <span className="inline-flex items-center gap-1.5 text-[12px] text-fg">
+            {flow.trigger.repeat === "none" ? <Clock className="w-3.5 h-3.5 text-fg-subtle" /> : <RepeatIcon className="w-3.5 h-3.5 text-fg-subtle" />}
+            {REPEAT_LABELS[flow.trigger.repeat]}
+          </span>
+          <span className="block text-[11px] text-fg-subtle truncate mt-0.5">
+            {flow.status === "active" && flow.nextRunAt ? `Next ${showTime(flow.nextRunAt)}` : flow.trigger.until ? `Until ${flow.trigger.until}` : "No upcoming run"}
+          </span>
+        </div>
+
+        <div className="col-span-2 md:col-span-1 pl-6.5 md:pl-0 min-w-0">
+          {flow.lastRun ? (
+            <>
+              <span className={`inline-flex items-center gap-1.5 text-[12px] font-medium ${OUTCOME[flow.lastRun.outcome].text}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${OUTCOME[flow.lastRun.outcome].dot}`} />
+                {OUTCOME[flow.lastRun.outcome].label}
+              </span>
+              <span className="block text-[11px] text-fg-subtle truncate mt-0.5">{showTime(flow.lastRun.startedAt)}</span>
+            </>
+          ) : (
+            <span className="text-[12px] text-fg-subtle">Not run yet</span>
           )}
         </div>
       </div>
 
       {open && (
-        <div className="ml-7 mt-3 space-y-3">
-          <p className="text-xs text-[#444] whitespace-pre-wrap bg-[#fafafa] border border-[#eaeaea] rounded-lg px-3 py-2">
-            {flow.action.text}
-          </p>
-          <p className="text-[10px] text-[#bbb]">Set up by {flow.createdByName || flow.createdByEmail} · {showTime(flow.createdAt)}</p>
-          {runs === null ? (
-            <RefreshCw className="w-4 h-4 animate-spin text-[#999]" />
-          ) : runs.length === 0 ? (
-            <p className="text-[11px] text-[#999]">It hasn&apos;t run yet.</p>
-          ) : (
-            <ul className="space-y-2">
-              {runs.map((r) => (
-                <li key={r.id} className="text-[11px]">
-                  <p>
-                    <span className={`font-medium ${OUTCOME_STYLE[r.outcome]}`}>{OUTCOME_LABEL[r.outcome]}</span>
-                    <span className="text-[#999]"> · {showTime(r.startedAt)} · {r.summary}</span>
-                  </p>
-                  {r.detail.length > 0 && (
-                    <ul className="mt-1 ml-3 space-y-0.5">
-                      {r.detail.map((d, i) => (
-                        <li key={i} className="text-[#666]">
-                          {d.to}
-                          <span className={d.error ? "text-[#b91c1c]" : "text-[#999]"}>
-                            {" — "}{d.error ?? d.skipped ?? (d.ok ? "sent" : "")}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
+        <div className="px-5 pb-5 md:pl-12">
+          <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-4">
+            <div className="rounded-xl border border-line bg-surface p-4">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-fg-subtle mb-2">Message</p>
+              <p className="text-[13px] text-fg whitespace-pre-wrap">{flow.action.text}</p>
+              <p className="text-[11px] text-fg-subtle mt-3">Created by {flow.createdByName || flow.createdByEmail} · {showTime(flow.createdAt)}</p>
+            </div>
+            <div className="rounded-xl border border-line bg-surface p-4">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-fg-subtle mb-2">Run history</p>
+              {runs === null ? (
+                <RefreshCw className="w-4 h-4 animate-spin text-fg-subtle" />
+              ) : runs.length === 0 ? (
+                <p className="text-[13px] text-fg-muted">It hasn&apos;t run yet.</p>
+              ) : (
+                <ol className="relative space-y-3 before:absolute before:left-0.75 before:top-1.5 before:bottom-1.5 before:w-px before:bg-line">
+                  {runs.map((r) => (
+                    <li key={r.id} className="relative pl-5">
+                      <span className={`absolute left-0 top-1.5 w-2 h-2 rounded-full ring-2 ring-surface ${OUTCOME[r.outcome].dot}`} />
+                      <p className="text-[12px]">
+                        <span className={`font-medium ${OUTCOME[r.outcome].text}`}>{OUTCOME[r.outcome].label}</span>
+                        <span className="text-fg-subtle"> · {showTime(r.startedAt)}</span>
+                      </p>
+                      <p className="text-[12px] text-fg-muted">{r.summary}</p>
+                      {r.detail.length > 0 && (
+                        <ul className="mt-1 space-y-0.5">
+                          {r.detail.map((d, i) => (
+                            <li key={i} className="text-[11px] text-fg-subtle">
+                              {d.to} — <span className={d.error ? "text-ink-rose" : ""}>{d.error ?? d.skipped ?? (d.ok ? "sent" : "")}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </li>
+  );
+}
+
+// ── Empty state: start from a template ───────────────────────────────────
+
+function Templates({ onPick }: { onPick: (t: Template | null) => void }) {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-dashed border-line-strong bg-surface px-6 py-8 text-center">
+        <span className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-surface-3 text-fg-muted mb-3">
+          <CalendarClock className="w-5 h-5" />
+        </span>
+        <p className="text-base font-semibold text-fg">No workflows yet</p>
+        <p className="text-sm text-fg-muted mt-1 max-w-md mx-auto">
+          Send texts on their own: reminders, notices and follow-ups, once or on a repeat. Start from a template or a blank one.
+        </p>
+        <button
+          onClick={() => onPick(null)}
+          className="mt-4 inline-flex items-center gap-2 bg-fg text-surface text-sm font-medium rounded-lg px-3.5 h-9 hover:opacity-90"
+        >
+          <Plus className="w-4 h-4" /> Blank workflow
+        </button>
+      </div>
+      <div>
+        <p className="text-[11px] font-medium uppercase tracking-wider text-fg-subtle mb-2.5">Templates</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+          {TEMPLATES.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => onPick(t)}
+              className="group text-left rounded-xl border border-line bg-surface p-4 hover:border-line-strong hover:shadow-sm transition-all"
+            >
+              <div className="flex items-center justify-between">
+                <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-surface-3 text-fg-muted group-hover:text-fg">
+                  <t.icon className="w-4 h-4" />
+                </span>
+                <span className="text-[11px] text-fg-subtle">{REPEAT_LABELS[t.repeat]}</span>
+              </div>
+              <p className="text-sm font-medium text-fg mt-3">{t.name}</p>
+              <p className="text-[12px] text-fg-muted mt-0.5">{t.blurb}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -374,10 +620,26 @@ function defaultWhen(): number {
   return Math.ceil(t / (15 * 60 * 1000)) * 15 * 60 * 1000;
 }
 
+function Step({ n, title, hint, children }: { n: number; title: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <section className="bg-surface border border-line rounded-xl">
+      <header className="flex items-center gap-3 px-5 py-3.5 border-b border-line">
+        <span className="flex items-center justify-center w-6 h-6 rounded-full bg-fg text-surface text-[11px] font-semibold tabular-nums">{n}</span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-fg">{title}</p>
+          {hint && <p className="text-[12px] text-fg-subtle">{hint}</p>}
+        </div>
+      </header>
+      <div className="p-5 space-y-4">{children}</div>
+    </section>
+  );
+}
+
 function Editor({
-  workflow, prefill, conversations, contacts, senders, live, onCancel, onSaved,
+  workflow, template, prefill, conversations, contacts, senders, live, onCancel, onSaved,
 }: {
   workflow: Workflow | null;
+  template: Template | null;
   prefill: SchedulePrefill | null;
   conversations: ScheduleConversation[];
   contacts: Array<{ number: string; name: string }>;
@@ -390,27 +652,17 @@ function Editor({
   const confirm = useConfirm();
   const target = workflow?.action.target;
 
-  const [name, setName] = useState(workflow?.name ?? "");
-  const [text, setText] = useState(workflow?.action.text ?? prefill?.text ?? "");
-  const [kind, setKind] = useState<"thread" | "numbers">(
-    target?.kind ?? (prefill ? "thread" : "numbers"),
-  );
-  const [sessionId, setSessionId] = useState(
-    target?.kind === "thread" ? target.sessionId : prefill?.sessionId ?? "",
-  );
+  const [name, setName] = useState(workflow?.name ?? template?.name ?? "");
+  const [text, setText] = useState(workflow?.action.text ?? prefill?.text ?? template?.text ?? "");
+  const [kind, setKind] = useState<"thread" | "numbers">(target?.kind ?? (prefill ? "thread" : "numbers"));
+  const [sessionId, setSessionId] = useState(target?.kind === "thread" ? target.sessionId : prefill?.sessionId ?? "");
   const [people, setPeople] = useState<Array<{ number: string; name: string }>>(() =>
-    target?.kind === "numbers"
-      ? target.numbers.map((n) => ({ number: n, name: target.labels?.[n] ?? "" }))
-      : [],
+    target?.kind === "numbers" ? target.numbers.map((n) => ({ number: n, name: target.labels?.[n] ?? "" })) : [],
   );
   const [mode, setMode] = useState<"individual" | "group">(target?.kind === "numbers" ? target.mode : "individual");
-  const [fromNumber, setFromNumber] = useState(
-    target?.kind === "numbers" ? target.fromNumber : senders[0]?.number ?? "",
-  );
-  const [when, setWhen] = useState(() =>
-    toLocalInput(workflow ? Date.parse(workflow.nextRunAt ?? workflow.trigger.at) : defaultWhen()),
-  );
-  const [repeat, setRepeat] = useState<Repeat>(workflow?.trigger.repeat ?? "none");
+  const [fromNumber, setFromNumber] = useState(target?.kind === "numbers" ? target.fromNumber : senders[0]?.number ?? "");
+  const [when, setWhen] = useState(() => toLocalInput(workflow ? Date.parse(workflow.nextRunAt ?? workflow.trigger.at) : defaultWhen()));
+  const [repeat, setRepeat] = useState<Repeat>(workflow?.trigger.repeat ?? template?.repeat ?? "none");
   const [until, setUntil] = useState(workflow?.trigger.until ?? "");
   const [query, setQuery] = useState("");
   const [threadQuery, setThreadQuery] = useState("");
@@ -425,8 +677,6 @@ function Editor({
   }, []);
 
   const conversation = conversations.find((c) => c.sessionId === sessionId);
-  // A conversation opened from the thread may not be in the list we were
-  // given (filtered out, say); keep its label rather than showing nothing.
   const threadLabel =
     conversation?.label ||
     (prefill?.sessionId === sessionId ? prefill.label : "") ||
@@ -435,31 +685,19 @@ function Editor({
   const atMs = fromLocalInput(when);
   const payload = {
     name,
-    trigger: {
-      at: atMs ? new Date(atMs).toISOString() : "",
-      repeat,
-      ...(repeat !== "none" && until ? { until } : {}),
-    },
+    trigger: { at: atMs ? new Date(atMs).toISOString() : "", repeat, ...(repeat !== "none" && until ? { until } : {}) },
     action: {
       text,
       target: kind === "thread"
-        ? {
-            kind: "thread",
-            sessionId,
-            user: conversation?.user ?? (target?.kind === "thread" ? target.user : prefill?.user ?? ""),
-            label: threadLabel || "",
-          }
+        ? { kind: "thread", sessionId, user: conversation?.user ?? (target?.kind === "thread" ? target.user : prefill?.user ?? ""), label: threadLabel || "" }
         : {
-            kind: "numbers",
-            numbers: people.map((p) => p.number),
-            fromNumber,
-            mode,
+            kind: "numbers", numbers: people.map((p) => p.number), fromNumber, mode,
             labels: Object.fromEntries(people.filter((p) => p.name).map((p) => [p.number, p.name])),
           },
     },
   };
   const checked = checkScheduledSms(payload, now);
-  const preview = checked.ok ? upcomingRuns(checked.trigger, now, 3) : [];
+  const preview = checked.ok ? upcomingRuns(checked.trigger, now, 4) : [];
 
   const typedNumber = tenDigits(query);
   const matches = useMemo(() => {
@@ -474,8 +712,7 @@ function Editor({
 
   const threadMatches = useMemo(() => {
     const q = threadQuery.trim().toLowerCase();
-    const list = q ? conversations.filter((c) => c.label.toLowerCase().includes(q)) : conversations;
-    return list.slice(0, 50);
+    return (q ? conversations.filter((c) => c.label.toLowerCase().includes(q)) : conversations).slice(0, 50);
   }, [threadQuery, conversations]);
 
   function addPerson(number: string, personName: string) {
@@ -485,25 +722,26 @@ function Editor({
     setQuery("");
   }
 
+  const audienceLabel = kind === "thread"
+    ? threadLabel || "No conversation picked"
+    : people.length === 0 ? "Nobody added yet" : people.length === 1 ? (people[0].name || formatPhone(people[0].number)) : `${people.length} people`;
+
   async function save() {
     if (!checked.ok || saving) {
       if (!checked.ok) toast.error(checked.error);
       return;
     }
-    const count = kind === "thread" ? 1 : people.length;
-    const who = kind === "thread" ? threadLabel || "this conversation" : `${count} ${count === 1 ? "person" : "people"}`;
     const ok = await confirm({
-      title: workflow ? "Save changes?" : "Schedule this text?",
+      title: workflow ? "Save changes?" : "Create this workflow?",
       description:
-        `It goes to ${who}, first at ${showTime(checked.firstRunAt)}` +
+        `It texts ${audienceLabel}, first at ${showTime(checked.firstRunAt)}` +
         `${repeat !== "none" ? `, then ${REPEAT_LABELS[repeat].toLowerCase()}` : ""}. ` +
         (live
           ? "Sending is live: these are real texts to real people, sent without anyone pressing send."
-          : "Sending is in test mode: it will run and record who it would text, but send nothing."),
-      confirmLabel: workflow ? "Save" : "Schedule",
+          : "Test mode is on: it will run and record who it would text, but send nothing."),
+      confirmLabel: workflow ? "Save" : "Create workflow",
     });
     if (!ok) return;
-
     setSaving(true);
     try {
       const res = await fetch(workflow ? `/api/workflows/${workflow.id}` : "/api/workflows", {
@@ -522,198 +760,258 @@ function Editor({
     }
   }
 
-  const field = "w-full text-sm bg-[#fafafa] border border-[#eaeaea] rounded-lg px-3 py-2 outline-none focus:border-[#0070f3] focus:bg-white transition-colors";
-  const label = "block text-[11px] font-medium text-[#666] mb-1.5";
-  const tab = (on: boolean) =>
-    `flex-1 flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-      on ? "bg-white text-[#0a0a0a] shadow-sm" : "text-[#666] hover:text-[#0a0a0a]"
+  const field = "w-full text-sm bg-surface-2 border border-line rounded-lg px-3 py-2 outline-none focus:border-line-strong focus:bg-surface transition-colors";
+  const label = "block text-[12px] font-medium text-fg-muted mb-1.5";
+  const seg = (on: boolean) =>
+    `flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${
+      on ? "bg-surface text-fg shadow-sm" : "text-fg-muted hover:text-fg"
     }`;
 
   return (
-    <div className="p-5 space-y-5">
-      <div>
-        <label className={label}>Name <span className="text-[#bbb] font-normal">optional, for the list</span></label>
-        <input className={field} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder="Monthly billing reminder" />
-      </div>
-
-      {/* ── Who ── */}
-      <div>
-        <label className={label}>Send to</label>
-        <div className="flex gap-1 bg-[#f5f5f5] rounded-lg p-1 mb-3">
-          <button type="button" className={tab(kind === "thread")} onClick={() => setKind("thread")}>
-            <MessageSquare className="w-3.5 h-3.5" /> A conversation
-          </button>
-          <button type="button" className={tab(kind === "numbers")} onClick={() => setKind("numbers")}>
-            <Users className="w-3.5 h-3.5" /> Contacts or numbers
+    <div className="p-4 md:p-0 space-y-5">
+      {/* Title bar */}
+      <div className="flex flex-wrap items-center gap-3">
+        <button onClick={onCancel} className="flex items-center gap-1.5 text-[13px] text-fg-muted hover:text-fg">
+          <ArrowLeft className="w-4 h-4" /> Back
+        </button>
+        <span className="text-line-strong">/</span>
+        <p className="text-sm font-semibold text-fg">{workflow ? "Edit workflow" : template ? template.name : "New workflow"}</p>
+        <div className="ml-auto flex items-center gap-2">
+          {!live && <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-ink-amber"><FlaskConical className="w-3.5 h-3.5" /> Test mode</span>}
+          <button onClick={onCancel} className="text-sm font-medium text-fg-muted px-3 h-9 rounded-lg hover:bg-surface-3">Cancel</button>
+          <button
+            onClick={save}
+            disabled={!checked.ok || saving}
+            className="flex items-center gap-2 bg-fg text-surface text-sm font-medium px-4 h-9 rounded-lg hover:opacity-90 disabled:opacity-40"
+          >
+            {saving && <RefreshCw className="w-4 h-4 animate-spin" />}
+            {workflow ? "Save changes" : "Create workflow"}
           </button>
         </div>
+      </div>
 
-        {kind === "thread" ? (
-          <div className="space-y-2">
-            {sessionId && (
-              <p className="text-xs text-[#15803d]">Selected: {threadLabel || "a conversation"}</p>
-            )}
-            <input className={field} value={threadQuery} onChange={(e) => setThreadQuery(e.target.value)} placeholder="Find a conversation or group…" />
-            <ul className="max-h-48 overflow-y-auto border border-[#eaeaea] rounded-lg divide-y divide-[#eaeaea]">
-              {threadMatches.map((c) => (
-                <li key={c.sessionId}>
-                  <button
-                    type="button"
-                    onClick={() => setSessionId(c.sessionId)}
-                    className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-                      c.sessionId === sessionId ? "bg-[#eff6ff] text-[#0070f3]" : "text-[#0a0a0a] hover:bg-[#fafafa]"
-                    }`}
-                  >
-                    {c.label}
-                    {c.isGroup && <span className="text-[10px] text-[#999] ml-1.5">group</span>}
-                  </button>
-                </li>
-              ))}
-              {threadMatches.length === 0 && <li className="px-3 py-2 text-xs text-[#999]">No conversation matches.</li>}
-            </ul>
-            <p className="text-[10px] text-[#bbb]">Sent into that conversation from the number it already uses, like a reply.</p>
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_20rem] gap-5 items-start">
+        <div className="space-y-4">
+          <div>
+            <label className={label}>Workflow name</label>
+            <input className={field} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder="e.g. Monthly billing reminder" />
           </div>
-        ) : (
-          <div className="space-y-3">
-            {people.length > 0 && (
+
+          <Step n={1} title="Audience" hint="Who receives the text">
+            <div className="flex gap-1 bg-surface-3 rounded-lg p-1">
+              <button type="button" className={seg(kind === "thread")} onClick={() => setKind("thread")}>
+                <MessageSquare className="w-3.5 h-3.5" /> Existing conversation
+              </button>
+              <button type="button" className={seg(kind === "numbers")} onClick={() => setKind("numbers")}>
+                <Users className="w-3.5 h-3.5" /> Contacts or numbers
+              </button>
+            </div>
+
+            {kind === "thread" ? (
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-fg-subtle absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input className={`${field} pl-8`} value={threadQuery} onChange={(e) => setThreadQuery(e.target.value)} placeholder="Find a conversation or group" />
+                </div>
+                <ul className="max-h-56 overflow-y-auto border border-line rounded-lg divide-y divide-line">
+                  {threadMatches.map((c) => {
+                    const on = c.sessionId === sessionId;
+                    return (
+                      <li key={c.sessionId}>
+                        <button
+                          type="button"
+                          onClick={() => setSessionId(c.sessionId)}
+                          className={`w-full flex items-center gap-2.5 text-left px-3 py-2 text-[13px] transition-colors ${on ? "bg-surface-3 text-fg" : "text-fg hover:bg-surface-2"}`}
+                        >
+                          <span className={`w-3.5 h-3.5 rounded-full border shrink-0 ${on ? "border-fg bg-fg ring-2 ring-inset ring-surface" : "border-line-strong"}`} />
+                          <span className="truncate flex-1">{c.label}</span>
+                          {c.isGroup && <span className="text-[10px] text-fg-subtle">Group</span>}
+                        </button>
+                      </li>
+                    );
+                  })}
+                  {threadMatches.length === 0 && <li className="px-3 py-3 text-[13px] text-fg-muted">No conversation matches.</li>}
+                </ul>
+                <p className="text-[12px] text-fg-subtle">Sent into the conversation from the number it already uses, like a reply.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-fg-subtle absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    className={`${field} pl-8`}
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (matches[0]) addPerson(matches[0].number, matches[0].name);
+                        else if (typedNumber) addPerson(typedNumber, "");
+                      }
+                    }}
+                    placeholder="Search contacts, or type a ten-digit number"
+                  />
+                  {(matches.length > 0 || typedNumber) && (
+                    <ul className="absolute z-20 left-0 right-0 mt-1 bg-surface border border-line rounded-lg shadow-xl overflow-hidden max-h-56 overflow-y-auto">
+                      {matches.map((c) => (
+                        <li key={c.number}>
+                          <button type="button" onMouseDown={(e) => { e.preventDefault(); addPerson(c.number, c.name); }} className="w-full text-left px-3 py-2 hover:bg-surface-2">
+                            <span className="block text-[13px] text-fg">{c.name}</span>
+                            <span className="block text-[11px] text-fg-subtle tabular-nums">{formatPhone(c.number) || c.number}</span>
+                          </button>
+                        </li>
+                      ))}
+                      {typedNumber && !people.some((p) => p.number === typedNumber) && (
+                        <li>
+                          <button type="button" onMouseDown={(e) => { e.preventDefault(); addPerson(typedNumber, ""); }} className="w-full flex items-center gap-2 text-left px-3 py-2 hover:bg-surface-2 text-[13px] text-fg">
+                            <Plus className="w-3.5 h-3.5 text-fg-muted" /> Add {formatPhone(typedNumber) || typedNumber}
+                          </button>
+                        </li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+
+                {people.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {people.map((p) => (
+                      <span key={p.number} className="inline-flex items-center gap-1.5 text-[12px] bg-surface-3 text-fg rounded-full pl-2.5 pr-1 py-1">
+                        {p.name ? <span className="font-medium">{p.name}</span> : null}
+                        <span className="text-fg-muted tabular-nums">{formatPhone(p.number) || p.number}</span>
+                        <button type="button" onClick={() => setPeople((prev) => prev.filter((x) => x.number !== p.number))} className="rounded-full p-0.5 text-fg-subtle hover:text-fg hover:bg-surface" aria-label="Remove">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[12px] text-fg-subtle">Nobody added yet.</p>
+                )}
+
+                {people.length > 1 && (
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    {([
+                      ["individual", "One by one", "Each person gets their own text; nobody sees who else got it."],
+                      ["group", "Group text", `Everyone sees everyone's replies (up to ${MAX_GROUP}).`],
+                    ] as const).map(([value, title, hint]) => (
+                      <label
+                        key={value}
+                        className={`flex gap-2.5 rounded-lg border p-3 cursor-pointer transition-colors ${mode === value ? "border-fg bg-surface-2" : "border-line hover:border-line-strong"}`}
+                      >
+                        <input type="radio" className="mt-0.5" checked={mode === value} onChange={() => setMode(value)} />
+                        <span>
+                          <span className="block text-[13px] font-medium text-fg">{title}</span>
+                          <span className="block text-[12px] text-fg-muted">{hint}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                <div>
+                  <label className={label}>Send from</label>
+                  <select className={field} value={fromNumber} onChange={(e) => setFromNumber(e.target.value)}>
+                    {senders.map((s) => (
+                      <option key={s.number} value={s.number}>{formatPhone(s.number) || s.number} · ext {s.user}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+          </Step>
+
+          <Step n={2} title="Message" hint="What they'll receive">
+            {!workflow && (
               <div className="flex flex-wrap gap-1.5">
-                {people.map((p) => (
-                  <span key={p.number} className="inline-flex items-center gap-1 text-xs bg-[#eff6ff] text-[#0070f3] rounded-md pl-2 pr-1 py-1">
-                    {p.name ? `${p.name} · ` : ""}{formatPhone(p.number) || p.number}
-                    <button
-                      type="button"
-                      onClick={() => setPeople((prev) => prev.filter((x) => x.number !== p.number))}
-                      className="rounded p-0.5 hover:bg-white"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
+                {TEMPLATES.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => { setText(t.text); if (!name) setName(t.name); }}
+                    className="inline-flex items-center gap-1.5 text-[12px] text-fg-muted border border-line rounded-full px-2.5 py-1 hover:text-fg hover:border-line-strong"
+                  >
+                    <t.icon className="w-3 h-3" /> {t.name}
+                  </button>
                 ))}
               </div>
             )}
-            <div className="relative">
-              <input
-                className={field}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (matches[0]) addPerson(matches[0].number, matches[0].name);
-                    else if (typedNumber) addPerson(typedNumber, "");
-                  }
-                }}
-                placeholder="Contact name, or a ten-digit number"
-              />
-              {(matches.length > 0 || typedNumber) && (
-                <ul className="absolute z-20 left-0 right-0 mt-1 bg-white border border-[#eaeaea] rounded-lg shadow-lg overflow-hidden max-h-56 overflow-y-auto">
-                  {matches.map((c) => (
-                    <li key={c.number}>
-                      <button
-                        type="button"
-                        onMouseDown={(e) => { e.preventDefault(); addPerson(c.number, c.name); }}
-                        className="w-full text-left px-3 py-2 hover:bg-[#fafafa] transition-colors"
-                      >
-                        <span className="block text-sm text-[#0a0a0a]">{c.name}</span>
-                        <span className="block text-[11px] text-[#999] tabular-nums">{formatPhone(c.number) || c.number}</span>
-                      </button>
-                    </li>
+            <textarea className={`${field} resize-none leading-relaxed`} rows={6} value={text} onChange={(e) => setText(e.target.value)} placeholder="Write the text…" />
+            <div className="flex items-center justify-between text-[12px]">
+              <span className="text-fg-subtle">Replace anything in [brackets] before saving.</span>
+              <span className={`tabular-nums ${text.length > MAX_TEXT_LENGTH ? "text-ink-rose" : "text-fg-subtle"}`}>
+                {text.length} / {MAX_TEXT_LENGTH} · {Math.max(1, Math.ceil(text.length / 160))} SMS
+              </span>
+            </div>
+          </Step>
+
+          <Step n={3} title="Schedule" hint="When it goes out, in Pacific time">
+            <div className="grid sm:grid-cols-3 gap-3">
+              <div className="sm:col-span-1">
+                <label className={label}>{repeat === "none" ? "Send at" : "Starting"}</label>
+                <input type="datetime-local" className={field} value={when} onChange={(e) => setWhen(e.target.value)} />
+              </div>
+              <div>
+                <label className={label}>Repeat</label>
+                <select className={field} value={repeat} onChange={(e) => setRepeat(e.target.value as Repeat)}>
+                  {(Object.keys(REPEAT_LABELS) as Repeat[]).map((r) => (
+                    <option key={r} value={r}>{REPEAT_LABELS[r]}</option>
                   ))}
-                  {typedNumber && !people.some((p) => p.number === typedNumber) && (
-                    <li>
-                      <button
-                        type="button"
-                        onMouseDown={(e) => { e.preventDefault(); addPerson(typedNumber, ""); }}
-                        className="w-full text-left px-3 py-2 hover:bg-[#fafafa] transition-colors text-sm text-[#0070f3]"
-                      >
-                        Add {formatPhone(typedNumber) || typedNumber}
-                      </button>
-                    </li>
-                  )}
-                </ul>
+                </select>
+              </div>
+              {repeat !== "none" && (
+                <div>
+                  <label className={label}>Ends <span className="font-normal text-fg-subtle">(optional)</span></label>
+                  <input type="date" className={field} value={until} onChange={(e) => setUntil(e.target.value)} />
+                </div>
               )}
             </div>
+          </Step>
+        </div>
 
-            {people.length > 1 && (
-              <div className="space-y-1.5">
-                <label className="flex items-start gap-2 text-xs text-[#0a0a0a] cursor-pointer">
-                  <input type="radio" checked={mode === "individual"} onChange={() => setMode("individual")} className="mt-0.5" />
-                  <span>Each person on their own <span className="text-[#999]">— nobody sees who else got it</span></span>
-                </label>
-                <label className="flex items-start gap-2 text-xs text-[#0a0a0a] cursor-pointer">
-                  <input type="radio" checked={mode === "group"} onChange={() => setMode("group")} className="mt-0.5" />
-                  <span>One group text <span className="text-[#999]">— everyone sees everyone&apos;s replies (up to {MAX_GROUP})</span></span>
-                </label>
-              </div>
-            )}
-
-            <div>
-              <label className={label}>From</label>
-              <select className={field} value={fromNumber} onChange={(e) => setFromNumber(e.target.value)}>
-                {senders.map((s) => (
-                  <option key={s.number} value={s.number}>{formatPhone(s.number) || s.number} · ext {s.user}</option>
-                ))}
-              </select>
+        {/* ── Live preview ── */}
+        <aside className="lg:sticky lg:top-0 space-y-4">
+          <div className="bg-surface border border-line rounded-xl p-4">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-fg-subtle mb-3">Preview</p>
+            <div className="rounded-2xl bg-surface-2 border border-line p-3 min-h-40">
+              <p className="text-center text-[10px] text-fg-subtle mb-2">
+                {checked.ok ? showTime(checked.firstRunAt) : "Text message"}
+              </p>
+              {text.trim() ? (
+                <div className="flex justify-end">
+                  <p className="max-w-[85%] rounded-2xl rounded-br-md bg-ink-blue text-white text-[13px] leading-snug px-3 py-2 whitespace-pre-wrap wrap-break-word">
+                    {text}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-center text-[12px] text-fg-subtle mt-6">Your message appears here.</p>
+              )}
             </div>
           </div>
-        )}
-      </div>
 
-      {/* ── What ── */}
-      <div>
-        <label className={label}>Message</label>
-        <textarea className={`${field} resize-none`} rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder="Write the text…" />
-        <p className={`text-[10px] mt-1 ${text.length > MAX_TEXT_LENGTH ? "text-[#b91c1c]" : "text-[#bbb]"}`}>
-          {text.length} / {MAX_TEXT_LENGTH}
-        </p>
-      </div>
-
-      {/* ── When ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className={label}>{repeat === "none" ? "Send at" : "Starting"} <span className="text-[#bbb] font-normal">Pacific time</span></label>
-          <input type="datetime-local" className={field} value={when} onChange={(e) => setWhen(e.target.value)} />
-        </div>
-        <div>
-          <label className={label}>Repeat</label>
-          <select className={field} value={repeat} onChange={(e) => setRepeat(e.target.value as Repeat)}>
-            {(Object.keys(REPEAT_LABELS) as Repeat[]).map((r) => (
-              <option key={r} value={r}>{REPEAT_LABELS[r]}</option>
-            ))}
-          </select>
-        </div>
-        {repeat !== "none" && (
-          <div>
-            <label className={label}>Until <span className="text-[#bbb] font-normal">optional, last day</span></label>
-            <input type="date" className={field} value={until} onChange={(e) => setUntil(e.target.value)} />
+          <div className="bg-surface border border-line rounded-xl p-4 space-y-3">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-fg-subtle">Summary</p>
+            <dl className="space-y-2 text-[13px]">
+              <div className="flex justify-between gap-3"><dt className="text-fg-muted">To</dt><dd className="text-fg text-right truncate">{audienceLabel}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-fg-muted">Repeats</dt><dd className="text-fg">{REPEAT_LABELS[repeat]}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-fg-muted">Sending</dt><dd className={live ? "text-ink-green" : "text-ink-amber"}>{live ? "Live" : "Test mode"}</dd></div>
+            </dl>
+            <div className="border-t border-line pt-3">
+              <p className="text-[12px] font-medium text-fg-muted mb-1.5">Upcoming runs</p>
+              {checked.ok ? (
+                <ul className="space-y-1">
+                  {preview.map((t, i) => (
+                    <li key={t} className="flex items-center gap-2 text-[12px] text-fg tabular-nums">
+                      <span className={`w-1.5 h-1.5 rounded-full ${i === 0 ? "bg-fg" : "bg-line-strong"}`} /> {showTime(t)}
+                    </li>
+                  ))}
+                  {repeat !== "none" && preview.length === 4 && <li className="text-[12px] text-fg-subtle pl-3.5">…and so on</li>}
+                </ul>
+              ) : (
+                <p className="text-[12px] text-fg-subtle">{checked.error}</p>
+              )}
+            </div>
           </div>
-        )}
-      </div>
-
-      <div className="rounded-lg bg-[#fafafa] border border-[#eaeaea] px-3 py-2.5">
-        {checked.ok ? (
-          <p className="text-xs text-[#444]">
-            <span className="font-medium text-[#0a0a0a]">Runs: </span>
-            {preview.map(showTime).join(" · ")}
-            {repeat !== "none" && preview.length === 3 ? " · …" : ""}
-          </p>
-        ) : (
-          <p className="text-xs text-[#999]">{checked.error}</p>
-        )}
-      </div>
-
-      <div className="flex items-center justify-end gap-2 pt-1">
-        <button onClick={onCancel} className="text-sm font-medium text-[#666] px-4 h-9 rounded-lg hover:bg-[#fafafa] transition-colors">
-          Back
-        </button>
-        <button
-          onClick={save}
-          disabled={!checked.ok || saving}
-          className="flex items-center gap-2 bg-[#0070f3] text-white text-sm font-medium px-4 h-9 rounded-lg hover:bg-[#0060df] transition-colors disabled:opacity-40"
-        >
-          {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CalendarClock className="w-4 h-4" />}
-          {workflow ? "Save" : "Schedule"}
-        </button>
+        </aside>
       </div>
     </div>
   );

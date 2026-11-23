@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Select from "@/components/ui/Select";
 import {
   CalendarClock, X, Plus, Pause, Play, Ban, Trash2, Pencil, RefreshCw, ChevronDown, ChevronRight,
@@ -8,6 +8,7 @@ import {
   CheckCircle2, Clock, Zap, FileText, Send, LayoutTemplate,
 } from "lucide-react";
 import Overlay from "@/components/ui/Overlay";
+import FloatingLayer from "@/components/ui/FloatingLayer";
 import DateTimePicker from "@/components/ui/DateTimePicker";
 import { useToast } from "@/lib/toast";
 import { useConfirm } from "@/lib/confirm";
@@ -417,6 +418,7 @@ function Row({
 }) {
   const [open, setOpen] = useState(false);
   const [menu, setMenu] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
   const [runs, setRuns] = useState<WorkflowRun[] | null>(null);
   const status = STATUS[flow.status];
   const done = flow.status === "completed" || flow.status === "canceled";
@@ -457,17 +459,20 @@ function Row({
         {/* Actions (mobile: top right) */}
         <div className="relative md:order-last justify-self-end">
           <button
+            ref={menuButton}
             onClick={() => setMenu((m) => !m)}
             disabled={busy}
-            className="flex items-center justify-center w-8 h-8 rounded-lg text-fg-muted hover:bg-surface-3 hover:text-fg disabled:opacity-40"
+            className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors disabled:opacity-40 ${
+              menu ? "bg-surface-3 text-fg" : "text-fg-muted hover:bg-surface-3 hover:text-fg"
+            }`}
             aria-label="Actions"
+            aria-expanded={menu}
           >
             {busy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <MoreHorizontal className="w-4 h-4" />}
           </button>
           {menu && (
-            <>
-              <div className="fixed inset-0 z-30" onClick={() => setMenu(false)} />
-              <div className="absolute right-0 top-full mt-1 z-40 w-44 bg-surface border border-line rounded-xl shadow-xl p-1">
+            <FloatingLayer anchorRef={menuButton} width={184} onClose={() => setMenu(false)}>
+              <div className="bg-surface border border-line rounded-xl shadow-xl p-1 mt-1">
                 {flow.status !== "canceled" && <button className={item} onClick={() => { setMenu(false); onAct("run_now"); }}><Send className="w-3.5 h-3.5 text-fg-muted" /> Run now</button>}
                 {!done && <button className={item} onClick={() => { setMenu(false); onEdit(); }}><Pencil className="w-3.5 h-3.5 text-fg-muted" /> Edit</button>}
                 {flow.status === "active" && <button className={item} onClick={() => { setMenu(false); onAct("pause"); }}><Pause className="w-3.5 h-3.5 text-fg-muted" /> Pause</button>}
@@ -476,7 +481,7 @@ function Row({
                 {!done && <button className={`${item} text-ink-rose hover:bg-tint-rose`} onClick={() => { setMenu(false); onAct("cancel"); }}><Ban className="w-3.5 h-3.5" /> Cancel</button>}
                 {done && <button className={`${item} text-ink-rose hover:bg-tint-rose`} onClick={() => { setMenu(false); onAct("delete"); }}><Trash2 className="w-3.5 h-3.5" /> Delete</button>}
               </div>
-            </>
+            </FloatingLayer>
           )}
         </div>
 

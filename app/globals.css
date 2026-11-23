@@ -315,3 +315,18 @@ html.dark .shadow-xl { box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
     transform: translateX(0);
   }
 }
+
+/* ── Focus rings ─────────────────────────────────────────────────────────────
+   A click leaves no ring behind (the browser default was a heavy black box
+   that stayed on a button after pressing it). Keyboard focus still shows,
+   softly, in the theme's own colour - people tabbing need to see it.
+   ─────────────────────────────────────────────────────────────────────────── */
+button:focus,
+a:focus,
+[role="button"]:focus { outline: none; }
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--line-strong);
+  outline-offset: 2px;
+}

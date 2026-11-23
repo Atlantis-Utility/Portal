@@ -69,9 +69,16 @@ export default function EditEmployeeDrawer({ open, onClose, employee }: Props) {
   // being backgrounded). Depending on the whole object meant any of those
   // incidental updates would silently wipe whatever the admin was mid-typing.
   // Re-hydrating only when the drawer opens or switches to a different
-  // employee is the actual intent here.
-  useEffect(() => {
-    if (!open) return;
+  // employee is the actual intent here. Done during render against the
+  // employee last loaded, rather than in an effect.
+  const loadFor = open ? employee.id : null;
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  if (loadedFor !== loadFor) {
+    setLoadedFor(loadFor);
+    if (open) hydrate();
+  }
+
+  function hydrate() {
     setForm({
       name:       employee.name,
       email:      employee.email,
@@ -88,8 +95,7 @@ export default function EditEmployeeDrawer({ open, onClose, employee }: Props) {
     setPageOptions(
       employee.pageOptions ?? defaultPageOptions(employee.accessRole === "Administrator"),
     );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, employee.id]);
+  }
 
   function set(field: keyof typeof form, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));

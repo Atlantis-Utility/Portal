@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
@@ -11,13 +11,23 @@ import { hasPageAccess } from "@/lib/nav-pages";
 import { useAuth } from "@/lib/auth-context";
 import { getInitials } from "@/lib/utils";
 
+// Notifications live in localStorage and announce themselves with an
+// "app-notification" event, so the unread count is read as an external store.
+function subscribeNotifications(onChange: () => void) {
+  window.addEventListener("app-notification", onChange);
+  return () => window.removeEventListener("app-notification", onChange);
+}
+
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { authUser, logout } = useAuth();
 
-  const [collapsed, setCollapsed]       = useState(false);
+  // AuthGuard renders a spinner until sign-in resolves, so this shell never
+  // hydrates against server HTML and can read localStorage straight away.
+  const [collapsed, setCollapsed]       = useState(() => {
+    try { return localStorage.getItem("sidebar-collapsed") === "true"; } catch { return false; }
+  });
   const [mobileOpen, setMobileOpen]     = useState(false);
-  const [unreadCount, setUnreadCount]   = useState(0);
 
   // Page-access permissions come live from auth-context (backed by a Supabase
   // realtime subscription on the employee row) — not a localStorage snapshot,
@@ -37,18 +47,12 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   // nothing until the grants have resolved, rather than counting everything
   // for a moment.
   const access = authUser?.access;
-  useEffect(() => {
-    const saved = localStorage.getItem("sidebar-collapsed");
-    if (saved === "true") setCollapsed(true);
-
-    function onNotif() { setUnreadCount(authUser ? getUnreadCount(access) : 0); }
-    onNotif();
-    window.addEventListener("app-notification", onNotif as EventListener);
-
-    return () => {
-      window.removeEventListener("app-notification", onNotif as EventListener);
-    };
-  }, [authUser, access]);
+  const signedIn = Boolean(authUser);
+  const unreadCount = useSyncExternalStore(
+    subscribeNotifications,
+    () => (signedIn ? getUnreadCount(access) : 0),
+    () => 0,
+  );
 
   const toggle = () => {
     setCollapsed((c) => {

@@ -42,7 +42,11 @@ export default function CalendarPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [outlookBanner, setOutlookBanner] = useState<"connected" | "error" | null>(null);
-  const [cards, setCards] = useState<KanbanCard[]>([]);
+  // Painted from the last visit's copy while the live list arrives. Safe to
+  // read during the first render: AuthGuard means this never hydrates.
+  const [cards, setCards] = useState<KanbanCard[]>(() => {
+    try { return JSON.parse(localStorage.getItem("sc:tasks") ?? "[]"); } catch { return []; }
+  });
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
     d.setDate(1);
@@ -52,7 +56,10 @@ export default function CalendarPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => ymd(new Date()));
 
-  const [outlookConnected, setOutlookConnected] = useState(false);
+  const outlookParam = searchParams.get("outlook");
+  const [outlookConnected, setOutlookConnected] = useState(
+    () => outlookParam === "connected" || document.cookie.includes("outlook_connected=1"),
+  );
   const [outlookEvents, setOutlookEvents] = useState<OutlookEvent[]>([]);
   const [selectedOutlookEvent, setSelectedOutlookEvent] = useState<OutlookEvent | null>(null);
   const [outlookDetailOpen, setOutlookDetailOpen] = useState(false);
@@ -62,10 +69,6 @@ export default function CalendarPage() {
   // the same realtime channel, so a meeting created/edited/deleted here shows
   // up there immediately, and vice versa.
   useEffect(() => {
-    try {
-      const c = localStorage.getItem("sc:tasks");
-      if (c) setCards(JSON.parse(c));
-    } catch {}
     const unsub = subscribeTasks((cs) => {
       setCards(cs);
       try { localStorage.setItem("sc:tasks", JSON.stringify(cs)); } catch {}
@@ -76,21 +79,30 @@ export default function CalendarPage() {
   // Microsoft/Outlook connects automatically on sign-in (see lib/auth-context.tsx),
   // so this page just checks the same cookie the Tasks page checks — no manual
   // "Connect" step needed here.
-  useEffect(() => {
-    setOutlookConnected(document.cookie.includes("outlook_connected=1"));
-
-    const param = searchParams.get("outlook");
-    if (param === "connected") {
+  //
+  // ?outlook=connected|error is the OAuth hand-off reporting back. It is
+  // taken in during render, against the value last seen, and the URL is
+  // then cleaned up and the banner timed out in effects.
+  const [seenOutlookParam, setSeenOutlookParam] = useState<string | null>(null);
+  if (outlookParam !== seenOutlookParam) {
+    setSeenOutlookParam(outlookParam);
+    if (outlookParam === "connected") {
       setOutlookConnected(true);
       setOutlookBanner("connected");
-      router.replace("/calendar");
-      setTimeout(() => setOutlookBanner(null), 4000);
-    } else if (param === "error") {
+    } else if (outlookParam === "error") {
       setOutlookBanner("error");
-      router.replace("/calendar");
-      setTimeout(() => setOutlookBanner(null), 4000);
     }
-  }, [searchParams, router]);
+  }
+
+  useEffect(() => {
+    if (outlookParam === "connected" || outlookParam === "error") router.replace("/calendar");
+  }, [outlookParam, router]);
+
+  useEffect(() => {
+    if (!outlookBanner) return;
+    const t = setTimeout(() => setOutlookBanner(null), 4000);
+    return () => clearTimeout(t);
+  }, [outlookBanner]);
 
   const fetchOutlookEvents = useCallback(async (year: number, month: number) => {
     try {
@@ -115,18 +127,25 @@ export default function CalendarPage() {
   // last time (localStorage), then refresh from Microsoft in the background —
   // the alternative is a blank grid every visit while the token-refresh +
   // Graph round trip completes.
+  // The cached copy is swapped in during render when the month changes; only
+  // the network refresh needs an effect.
+  const cursorYear = cursor.getFullYear();
+  const cursorMonth = cursor.getMonth();
+  const monthKey = `${cursorYear}-${cursorMonth}`;
+  const [eventsMonth, setEventsMonth] = useState<string | null>(null);
+  if (eventsMonth !== monthKey) {
+    setEventsMonth(monthKey);
+    let cached: OutlookEvent[] = [];
+    try { cached = JSON.parse(localStorage.getItem(`sc:outlook:${monthKey}`) ?? "[]"); } catch {}
+    setOutlookEvents(cached);
+  }
+
   useEffect(() => {
-    const year = cursor.getFullYear();
-    const month = cursor.getMonth();
-    try {
-      const cached = localStorage.getItem(`sc:outlook:${year}-${month}`);
-      if (cached) setOutlookEvents(JSON.parse(cached));
-      else setOutlookEvents([]);
-    } catch {
-      setOutlookEvents([]);
-    }
-    if (outlookConnected) fetchOutlookEvents(year, month);
-  }, [outlookConnected, cursor, fetchOutlookEvents]);
+    // fetchOutlookEvents sets state only after its fetch resolves; the rule
+    // can't see past the useCallback to tell.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (outlookConnected) fetchOutlookEvents(cursorYear, cursorMonth);
+  }, [outlookConnected, cursorYear, cursorMonth, fetchOutlookEvents]);
 
   const meetingsByDate = useMemo(() => {
     const map = new Map<string, KanbanCard[]>();

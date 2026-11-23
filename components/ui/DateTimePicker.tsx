@@ -123,18 +123,21 @@ export default function DateTimePicker({
     return () => document.removeEventListener("mousedown", handleOutside);
   }, [floating]);
 
-  // Sync state when value changes externally
-  useEffect(() => {
-    const p = parseValue(value, dateOnly);
-    if (p) {
-      setSelectedDate({ year: p.year, month: p.month, day: p.day });
-      setViewYear(p.year);
-      setViewMonth(p.month);
-      setTime(`${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`);
+  // Sync state when value changes externally. Done during render against the
+  // value last seen, rather than in an effect, so the picker never paints
+  // one frame showing the old date.
+  const [seen, setSeen] = useState({ value, dateOnly });
+  if (seen.value !== value || seen.dateOnly !== dateOnly) {
+    setSeen({ value, dateOnly });
+    if (parsed) {
+      setSelectedDate({ year: parsed.year, month: parsed.month, day: parsed.day });
+      setViewYear(parsed.year);
+      setViewMonth(parsed.month);
+      setTime(`${String(parsed.hour).padStart(2, "0")}:${String(parsed.minute).padStart(2, "0")}`);
     } else {
       setSelectedDate(null);
     }
-  }, [value, dateOnly]);
+  }
 
   function prevMonth() {
     if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); }

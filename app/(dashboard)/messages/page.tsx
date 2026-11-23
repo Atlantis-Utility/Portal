@@ -133,11 +133,11 @@ function Thread({
   // would make the reply vanish and reappear.
   const pending = useRef<SmsMessage[]>([]);
 
+  // No loading/error reset here: the parent keys <Thread> on sessionId, so
+  // each conversation mounts fresh with loading already true.
   useEffect(() => {
     let alive = true;
     pending.current = [];
-    setLoading(true);
-    setError("");
 
     const read = async (silent: boolean, attempt = 0) => {
       try {
@@ -523,22 +523,21 @@ function NewMessage({
   const segments = to.split(/[,;]/);
   const typing = (segments[segments.length - 1] ?? "").trim().toLowerCase();
   const typingDigits = typing.replace(/\D/g, "");
+  // Not wrapped in useMemo: the React Compiler memoizes it, and could not
+  // preserve a hand-written memo over these derived values.
   const already = parsed.slice(0, -1);
-  const matches = useMemo(() => {
-    if (!typing) return [];
-    return suggestions
-      .filter((x) => {
-        const key = x.kind === "extension" ? x.number : x.number.slice(-10);
-        if (already.includes(key)) return false;
-        // A colleague can only be messaged on their own, so once there
-        // is more than one recipient they stop being offered.
-        if (x.kind === "extension" && segments.length > 1) return false;
-        return typingDigits.length >= 2
-          ? key.includes(typingDigits)
-          : x.label.toLowerCase().includes(typing);
-      })
-      .slice(0, 6);
-  }, [suggestions, typing, typingDigits, already.join(","), segments.length]);
+  const matches = !typing ? [] : suggestions
+    .filter((x) => {
+      const key = x.kind === "extension" ? x.number : x.number.slice(-10);
+      if (already.includes(key)) return false;
+      // A colleague can only be messaged on their own, so once there
+      // is more than one recipient they stop being offered.
+      if (x.kind === "extension" && segments.length > 1) return false;
+      return typingDigits.length >= 2
+        ? key.includes(typingDigits)
+        : x.label.toLowerCase().includes(typing);
+    })
+    .slice(0, 6);
 
   /** Replaces the part being typed with a chosen number. */
   function choose(value: string, kind?: "number" | "extension") {
@@ -960,8 +959,10 @@ export default function MessagesPage() {
   const [senders, setSenders] = useState<Array<{ number: string; user: string }>>([]);
   const [error, setError] = useState("");
 
+  // Doesn't raise the spinner itself: the first load starts with state
+  // already "loading", and the Refresh and Retry buttons go through
+  // reload(), which raises it before asking.
   const load = useCallback(async (silent = false) => {
-    if (!silent) setState("loading");
     try {
       const res = await fetch("/api/ringlogix/messages");
       if (res.status === 503) { setState("unconfigured"); return; }
@@ -986,7 +987,15 @@ export default function MessagesPage() {
     }
   }, []);
 
+  // load() sets state only after its fetch resolves; the rule can't see
+  // past the useCallback to tell.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
+
+  const reload = () => {
+    setState("loading");
+    load();
+  };
 
   // A text can arrive in any conversation, not just the open one, so the
   // list refreshes itself as well - silently, so it never flashes a
@@ -1184,7 +1193,7 @@ export default function MessagesPage() {
             <PanelRight className="w-4 h-4" />
           </button>
           <button
-            onClick={() => load()}
+            onClick={reload}
             disabled={state === "loading"}
             data-tip="Fetch the latest conversations"
             className="flex items-center gap-2 border border-[#eaeaea] bg-white text-sm font-medium text-[#0a0a0a] px-3.5 h-9 rounded-lg hover:bg-[#fafafa] transition-colors disabled:opacity-50"
@@ -1212,7 +1221,7 @@ export default function MessagesPage() {
           </p>
           <p className="text-xs text-[#999] max-w-md mx-auto">{error}</p>
           {state === "error" && (
-            <button onClick={() => load()} className="mt-3 text-xs text-[#0070f3] hover:underline">Retry</button>
+            <button onClick={reload} className="mt-3 text-xs text-[#0070f3] hover:underline">Retry</button>
           )}
         </div>
       )}

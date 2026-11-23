@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useSyncExternalStore } from "react";
 
 type Theme = "light" | "dark";
 
@@ -16,23 +16,38 @@ const ThemeContext = createContext<ThemeContextValue>({
   toggleTheme: () => {},
 });
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light");
+// The theme lives in localStorage, so it is read as an external store rather
+// than copied into state by an effect. The server has no localStorage and
+// renders light; the inline script in app/layout.tsx has already put the
+// right class on <html> before hydration, so there is no flash either way.
+const THEME_EVENT = "theme-change";
 
-  useEffect(() => {
-    const saved = localStorage.getItem("theme") as Theme | null;
-    const initial = saved ?? "light";
-    setTheme(initial);
-    document.documentElement.classList.toggle("dark", initial === "dark");
-  }, []);
+function subscribe(onChange: () => void) {
+  window.addEventListener(THEME_EVENT, onChange);
+  // Another tab switching theme switches this one too.
+  window.addEventListener("storage", onChange);
+  return () => {
+    window.removeEventListener(THEME_EVENT, onChange);
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+function readTheme(): Theme {
+  try {
+    return localStorage.getItem("theme") === "dark" ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const theme = useSyncExternalStore(subscribe, readTheme, () => "light" as const);
 
   function toggleTheme() {
-    setTheme((prev) => {
-      const next: Theme = prev === "light" ? "dark" : "light";
-      localStorage.setItem("theme", next);
-      document.documentElement.classList.toggle("dark", next === "dark");
-      return next;
-    });
+    const next: Theme = readTheme() === "light" ? "dark" : "light";
+    try { localStorage.setItem("theme", next); } catch {}
+    document.documentElement.classList.toggle("dark", next === "dark");
+    window.dispatchEvent(new Event(THEME_EVENT));
   }
 
   return (

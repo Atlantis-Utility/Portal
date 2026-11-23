@@ -41,7 +41,11 @@ const allStatuses: Array<"All Statuses" | EmployeeStatus> = [
 
 export default function EmployeesPage() {
   const router = useRouter();
-  const [employees, setEmployees] = useState<Employee[]>([]);
+  // Painted from the last visit's copy while the live list arrives. Safe to
+  // read during the first render: AuthGuard means this never hydrates.
+  const [employees, setEmployees] = useState<Employee[]>(() => {
+    try { return JSON.parse(localStorage.getItem("sc:employees") ?? "[]"); } catch { return []; }
+  });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<"All Statuses" | EmployeeStatus>(
@@ -49,10 +53,6 @@ export default function EmployeesPage() {
   );
 
   useEffect(() => {
-    try {
-      const c = localStorage.getItem("sc:employees");
-      if (c) setEmployees(JSON.parse(c));
-    } catch {}
     const unsub = subscribeEmployees((emps) => {
       setEmployees(emps);
       try { localStorage.setItem("sc:employees", JSON.stringify(emps)); } catch {}

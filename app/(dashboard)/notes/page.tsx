@@ -97,21 +97,26 @@ export default function NotesPage() {
     ]),
   });
 
-  useEffect(() => {
+  // The editor is refilled whenever a different note is shown, done during
+  // render against the one last shown. Keyed on the note actually found, not
+  // on selectedId: a note opened from ?note=<id> is selected before the list
+  // has loaded, and keying on the id filled the editor with blanks while it
+  // was missing and never again once it arrived.
+  const shownId = selected?.id ?? null;
+  const [editorFor, setEditorFor] = useState<string | null>(null);
+  if (editorFor !== shownId) {
+    setEditorFor(shownId);
     setDraftTitle(selected?.title ?? "");
     setDraftBody(selected?.body ?? "");
     setShareOpen(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
+  }
 
   // Falls back cleanly if the selected note is deleted from elsewhere.
   //
   // The length check is what lets ?note=<id> work: on the first render the
   // list is still empty, and without it a note named in the URL was
   // deselected before it had a chance to arrive.
-  useEffect(() => {
-    if (notes.length > 0 && selectedId && !notes.some((n) => n.id === selectedId)) setSelectedId(null);
-  }, [notes, selectedId]);
+  if (notes.length > 0 && selectedId && !selected) setSelectedId(null);
 
   // Edits save on blur, which is invisible — drop the "Saved" tick shortly
   // after so the editor doesn't wear a stale confirmation indefinitely.

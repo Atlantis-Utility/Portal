@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Drawer from "@/components/ui/Drawer";
 import { inputClass } from "@/components/ui/FormField";
 import { getAvatarColor, getInitials } from "@/lib/utils";
@@ -202,12 +202,16 @@ export default function OutlookEventDetailDrawer({
   // job is forcing that re-render after a delete, which touches no other state.
   const [, setNoteVersion] = useState(0);
 
-  useEffect(() => {
+  // Closing the drawer drops a half-made edit. Done during render against
+  // the last value of `open`, rather than in an effect.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
     if (!open) {
       setCompanyEditing(false);
       setAddingNote(false);
     }
-  }, [open]);
+  }
 
   if (!event) return null;
 

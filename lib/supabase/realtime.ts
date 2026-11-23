@@ -34,28 +34,27 @@ async function hasSession(): Promise<boolean> {
   // Not signed in *yet*, a page can mount before the session is rehydrated.
   // Wait briefly for the next auth event rather than publishing a false empty.
   return new Promise<boolean>((resolve) => {
-    // `unsubscribe` is assigned after onAuthStateChange returns, but the
+    // The unsubscribe is filled in after onAuthStateChange returns, but the
     // callback can in principle fire before that, so finish() tolerates it
     // being unset rather than throwing on a temporal-dead-zone reference.
     let settled = false;
-    let unsubscribe: (() => void) | undefined;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    const sub: { off?: () => void } = {};
 
     const finish = (value: boolean) => {
       if (settled) return;
       settled = true;
-      if (timer) clearTimeout(timer);
-      unsubscribe?.();
+      clearTimeout(timer);
+      sub.off?.();
       resolve(value);
     };
 
-    timer = setTimeout(() => finish(false), 10_000);
+    const timer = setTimeout(() => finish(false), 10_000);
     const listener = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) finish(true);
     });
-    unsubscribe = () => listener.data.subscription.unsubscribe();
+    sub.off = () => listener.data.subscription.unsubscribe();
     // Covers the callback having already fired synchronously above.
-    if (settled) unsubscribe();
+    if (settled) sub.off();
   });
 }
 

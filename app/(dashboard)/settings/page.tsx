@@ -33,13 +33,11 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
 // ── Tabs ───────────────────────────────────────────────────────────────────
 
 function AppearanceTab({ onSave }: { onSave: (msg: string) => void }) {
+  // No "mounted" guard: the theme is read with useSyncExternalStore, and
+  // AuthGuard means this page never renders on the server anyway.
   const { theme, toggleTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => { setMounted(true); }, []);
 
   function setThemeMode(mode: "light" | "dark") {
-    if (!mounted) return;
     if (mode === theme) return;
     toggleTheme();
     onSave(`Switched to ${mode} mode`);
@@ -50,8 +48,6 @@ function AppearanceTab({ onSave }: { onSave: (msg: string) => void }) {
       metadata: { theme: mode },
     });
   }
-
-  if (!mounted) return null;
 
   return (
     <div className="space-y-5">

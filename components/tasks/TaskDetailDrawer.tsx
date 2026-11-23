@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Drawer from "@/components/ui/Drawer";
 import FormField, { inputClass } from "@/components/ui/FormField";
 import DateTimePicker from "@/components/ui/DateTimePicker";
@@ -86,13 +86,17 @@ export default function TaskDetailDrawer({ card, open, onClose, onUpdate, onDele
   const [form, setForm] = useState(emptyForm);
   const [saveError, setSaveError] = useState("");
 
-  useEffect(() => {
+  // Closing the drawer drops whatever was half-done in it. Done during
+  // render against the last value of `open`, rather than in an effect.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
     if (!open) {
       setEditing(false);
       setConfirmDelete(false);
       setSaveError("");
     }
-  }, [open]);
+  }
 
   // Keyed on card?.id rather than the whole `card` object — `card` is
   // `selectedCard` in the parent pages, sourced from a live subscribeTasks()
@@ -100,7 +104,10 @@ export default function TaskDetailDrawer({ card, open, onClose, onUpdate, onDele
   // on the full object here would silently wipe in-progress edits the moment
   // the parent starts refreshing `selectedCard` from live data (e.g. to show
   // concurrent edits) — a very natural future change.
-  useEffect(() => {
+  const fillFor = card && editing ? card.id : null;
+  const [filledFor, setFilledFor] = useState<string | null>(null);
+  if (filledFor !== fillFor) {
+    setFilledFor(fillFor);
     if (card && editing) {
       setForm({
         title:       card.title,
@@ -118,8 +125,7 @@ export default function TaskDetailDrawer({ card, open, onClose, onUpdate, onDele
         company:     card.company     ?? "",
       });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editing, card?.id]);
+  }
 
   function setF<K extends keyof typeof emptyForm>(key: K, val: typeof emptyForm[K]) {
     setForm((p) => ({ ...p, [key]: val }));

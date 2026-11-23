@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 function readSession<T>(key: string): T | null {
   try {
@@ -19,14 +19,15 @@ export function useCachedFetch<T>(
   pollMs?: number,
 ): { data: T | null; loading: boolean; error: string | null; refresh: () => Promise<void> } {
   const [data, setData]       = useState<T | null>(() => readSession<T>(cacheKey));
-  const [loading, setLoading] = useState(true);
+  // With something cached already there is nothing to block the UI on.
+  const [loading, setLoading] = useState(() => readSession(cacheKey) === null);
   const [error, setError]     = useState<string | null>(null);
-  const urlRef = useRef(url);
-  urlRef.current = url;
 
+  // A new url is a new fetch, so it belongs in the dependencies rather than
+  // in a ref that is written during render.
   const fetchNow = useCallback(async () => {
     try {
-      const res  = await fetch(urlRef.current);
+      const res  = await fetch(url);
       const json = await res.json() as T;
       setData(json);
       setError(null);
@@ -36,16 +37,17 @@ export function useCachedFetch<T>(
     } finally {
       setLoading(false);
     }
-  }, [cacheKey]);
+  }, [cacheKey, url]);
 
   useEffect(() => {
-    // If we already have cached data, don't block the UI
-    if (readSession(cacheKey)) setLoading(false);
+    // fetchNow sets state only after its fetch resolves; the rule can't see
+    // past the useCallback to tell.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchNow();
     if (!pollMs) return;
     const iv = setInterval(fetchNow, pollMs);
     return () => clearInterval(iv);
-  }, [fetchNow, cacheKey, pollMs]);
+  }, [fetchNow, pollMs]);
 
   return { data, loading, error, refresh: fetchNow };
 }

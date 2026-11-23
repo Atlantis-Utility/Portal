@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { updateEmployee } from "@/lib/db/employees";
@@ -71,23 +71,29 @@ export default function AccountPage() {
   const [saving,   setSaving]   = useState(false);
   const [saved,    setSaved]    = useState(false);
   const [error,    setError]    = useState("");
-  const [logs,     setLogs]     = useState<ActivityLogEntry[]>([]);
+  // Read during the first render: AuthGuard means this never hydrates.
+  const [allLogs,  setAllLogs]  = useState<ActivityLogEntry[]>(getLogs);
 
   // Subscribe to employee row — by employeeId if linked, else find by email
+  // Keyed on these fields rather than the whole authUser, which is replaced
+  // on every realtime update to the employee row.
+  const meEmployeeId = authUser?.employeeId;
+  const meEmail = authUser?.email;
+  const meIsAdmin = Boolean(authUser?.isAdmin);
   useEffect(() => {
-    if (!authUser) return;
+    if (!meEmail) return;
 
     function applyRow(row: { id: string; data: Employee } | null) {
       if (!row) return;
       const data = { ...row.data, id: row.id };
-      if (!data.accessRole && authUser!.isAdmin) {
+      if (!data.accessRole && meIsAdmin) {
         updateEmployee(row.id, { accessRole: "Administrator" } as Partial<Employee>).catch(() => {});
       }
       setEmployee(data);
     }
 
-    if (authUser.employeeId) {
-      const employeeId = authUser.employeeId;
+    if (meEmployeeId) {
+      const employeeId = meEmployeeId;
       supabase.from("employees").select("id, data").eq("id", employeeId).maybeSingle()
         .then(({ data }) => applyRow(data));
 
@@ -100,30 +106,28 @@ export default function AccountPage() {
     }
 
     // Admin with no employeeId — try to find by matching email
-    supabase.from("employees").select("id, data").eq("email", authUser.email).maybeSingle()
+    supabase.from("employees").select("id, data").eq("email", meEmail).maybeSingle()
       .then(({ data, error }) => {
         if (error) { console.error("[account] employee lookup:", error); return; }
         applyRow(data);
       });
-  }, [authUser?.employeeId, authUser?.email]);
+  }, [meEmployeeId, meEmail, meIsAdmin]);
 
-  // Activity log
+  // Activity log: held whole, kept current by the event, and narrowed to
+  // this person as it is read.
   useEffect(() => {
-    const all = getLogs();
-    const mine = all.filter((e) =>
-      authUser?.employeeId ? e.userId === authUser.employeeId : e.userId === null
-    );
-    setLogs(mine.slice(0, 30));
-    function onEntry() {
-      const updated = getLogs();
-      const filtered = updated.filter((e) =>
-        authUser?.employeeId ? e.userId === authUser.employeeId : e.userId === null
-      );
-      setLogs(filtered.slice(0, 30));
-    }
+    function onEntry() { setAllLogs(getLogs()); }
     window.addEventListener("activity-log-entry", onEntry);
     return () => window.removeEventListener("activity-log-entry", onEntry);
-  }, [authUser]);
+  }, []);
+
+  const myEmployeeId = authUser?.employeeId;
+  const logs = useMemo(
+    () => allLogs
+      .filter((e) => (myEmployeeId ? e.userId === myEmployeeId : e.userId === null))
+      .slice(0, 30),
+    [allLogs, myEmployeeId],
+  );
 
   // ── Edit handlers ───────────────────────────────────────────────────────
 

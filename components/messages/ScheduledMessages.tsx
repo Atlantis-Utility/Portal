@@ -84,6 +84,7 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
   const [version, setVersion] = useState(0);
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
+  const loadedOnce = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -95,14 +96,28 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
         if (!res.ok) throw new Error(data.error ?? "Couldn't load workflows");
         setWorkflows(data.workflows ?? []);
         setError("");
+        loadedOnce.current = true;
       } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : "Couldn't load workflows");
+        // A background refresh that fails keeps the list it has; only a
+        // first load that fails has nothing better to show than the error.
+        if (alive && !loadedOnce.current) setError(e instanceof Error ? e.message : "Couldn't load workflows");
       }
     })();
     return () => { alive = false; };
   }, [version]);
 
   const reload = () => setVersion((v) => v + 1);
+
+  // Live: the workflow tables are closed to the browser (the server reads
+  // them for it), so Supabase's realtime feed can't reach this page. It
+  // asks again every ten seconds while being looked at instead, and the
+  // moment the tab is looked at again.
+  useEffect(() => {
+    const tick = () => { if (document.visibilityState === "visible") setVersion((v) => v + 1); };
+    const timer = setInterval(tick, 10_000);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", tick); };
+  }, []);
 
   async function act(flow: Workflow, what: "pause" | "resume" | "cancel" | "delete" | "run_now") {
     if (what === "run_now") {
@@ -423,19 +438,26 @@ function Row({
   const status = STATUS[flow.status];
   const done = flow.status === "completed" || flow.status === "canceled";
 
-  async function toggle() {
-    const next = !open;
-    setOpen(next);
-    if (next && runs === null) {
+  function toggle() {
+    setOpen((o) => !o);
+  }
+
+  // Fetched when opened, and again whenever the list reports a newer run.
+  const latestRun = flow.lastRun?.id ?? "";
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    (async () => {
       try {
         const res = await fetch(`/api/workflows/${flow.id}`);
         const data = await res.json();
-        setRuns(res.ok ? data.runs ?? [] : []);
+        if (alive) setRuns(res.ok ? data.runs ?? [] : []);
       } catch {
-        setRuns([]);
+        if (alive) setRuns((r) => r ?? []);
       }
-    }
-  }
+    })();
+    return () => { alive = false; };
+  }, [open, flow.id, latestRun]);
 
   const item = "w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] text-left transition-colors hover:bg-surface-3";
 

@@ -2,6 +2,12 @@ export interface NavPage {
   href: string;
   label: string;
   section: string;
+  /**
+   * Held automatically by anyone who holds this other page. For a page that
+   * is part of an existing job, so adding it doesn't mean re-ticking it on
+   * every user who already does that job. It can still be ticked on its own.
+   */
+  impliedBy?: string;
 }
 
 // This list is the access-control surface, not just a nav menu: AuthGuard
@@ -26,6 +32,7 @@ export interface NavPage {
 export const NAV_PAGES: NavPage[] = [
   { href: "/",           label: "Dashboard", section: "Workspace" },
   { href: "/messages",   label: "Messages",  section: "Workspace" },
+  { href: "/inbox",      label: "Inbox",     section: "Workspace", impliedBy: "/messages" },
   { href: "/workflows",  label: "Workflows", section: "Workspace" },
 
   { href: "/contacts",   label: "Contacts",  section: "People"    },
@@ -41,6 +48,16 @@ export const NAV_PAGES: NavPage[] = [
 ];
 
 export const ALL_HREFS = NAV_PAGES.map((p) => p.href);
+
+/** A saved access list plus the pages it implies (see `impliedBy`). */
+export function expandAccess(access: string[]): string[];
+export function expandAccess(access: string[] | undefined): string[] | undefined;
+export function expandAccess(access: string[] | undefined): string[] | undefined {
+  if (!access) return access;
+  const out = new Set(access);
+  for (const p of NAV_PAGES) if (p.impliedBy && out.has(p.impliedBy)) out.add(p.href);
+  return [...out];
+}
 
 /**
  * Mirrors AuthGuard's rule: `undefined` access means unrestricted, and a
@@ -58,7 +75,7 @@ export function hasPageAccess(href: string, access: string[] | undefined): boole
     p.href === "/" ? href === "/" : href === p.href || href.startsWith(`${p.href}/`)
   ).sort((a, b) => b.href.length - a.href.length)[0];
   if (!page) return true;
-  return access.includes(page.href);
+  return expandAccess(access).includes(page.href);
 }
 
 /**
@@ -72,6 +89,7 @@ export function hasPageAccess(href: string, access: string[] | undefined): boole
  */
 export function firstAllowedPage(access: string[] | undefined): string | null {
   if (!access) return "/";
-  const page = NAV_PAGES.find((p) => access.includes(p.href));
+  const held = expandAccess(access);
+  const page = NAV_PAGES.find((p) => held.includes(p.href));
   return page?.href ?? null;
 }

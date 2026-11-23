@@ -7,7 +7,7 @@ import Sidebar from "./Sidebar";
 import GlobalSearch from "./GlobalSearch";
 import { Menu, Bell, LogOut, User, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { getUnreadCount } from "@/lib/notifications";
-import { hasPageAccess, NAV_PAGES } from "@/lib/nav-pages";
+import { expandAccess, hasPageAccess, NAV_PAGES } from "@/lib/nav-pages";
 import { ACCENT, areaFor } from "@/lib/areas";
 import { useAuth } from "@/lib/auth-context";
 import { getInitials } from "@/lib/utils";
@@ -38,7 +38,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   // The dashboard is everyone's (lib/nav-pages.ts), so it belongs in the
   // sidebar whatever the grant list says: without this, somebody granted
   // only Leads stood on the dashboard with no link to it in the nav.
-  const allowedHrefs = authUser?.access ? [...new Set(["/", ...authUser.access])] : undefined;
+  const allowedHrefs = authUser?.access ? [...new Set(["/", ...expandAccess(authUser.access)])] : undefined;
 
   // The bell used to go to the Logs feed unconditionally, which 404s for
   // anybody not granted Logs. The dashboard's own notification panel is the

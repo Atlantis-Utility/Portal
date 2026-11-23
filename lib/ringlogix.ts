@@ -171,6 +171,14 @@ const LIVE_OBJECTS = new Set(["messagesession", "message"]);
 const RL_CONTACT_TTL = 20_000;
 const CONTACT_OBJECTS = new Set(["contact"]);
 
+/**
+ * The Inbox (voicemails via UC Inbox, calls via call history): a new
+ * voicemail should show within a minute, but reading every extension's box
+ * is ~50 calls under a rate limit, so not every poll.
+ */
+const RL_INBOX_TTL = 45_000;
+const INBOX_OBJECTS = new Set(["conversation", "cdr2"]);
+
 async function pbxApiRaw(
   object: string,
   action: string,
@@ -227,7 +235,10 @@ function pbxApi(
   if (!READ_ACTIONS.has(action)) return doFetch();
   // Stable cache key from sorted params
   const paramStr = Object.keys(params).sort().map((k) => `${k}=${params[k]}`).join("&");
-  const ttl = LIVE_OBJECTS.has(object) ? RL_MESSAGE_TTL : CONTACT_OBJECTS.has(object) ? RL_CONTACT_TTL : RL_TTL;
+  const ttl = LIVE_OBJECTS.has(object) ? RL_MESSAGE_TTL
+    : CONTACT_OBJECTS.has(object) ? RL_CONTACT_TTL
+    : INBOX_OBJECTS.has(object) ? RL_INBOX_TTL
+    : RL_TTL;
   return withCache(`rl:${object}:${action}:${paramStr}`, ttl, doFetch);
 }
 
@@ -285,6 +296,25 @@ export async function getMessageSessions(domain: string, user: string) {
 }
 
 /** Every message in one conversation, newest first as stored. */
+/**
+ * UC Inbox: one extension's chats and voicemails in one list, each tagged
+ * `conversation_type` ("chat", "vmail"; the docs also name "call" and "fax",
+ * which this tenant never returns - calls come from call history instead).
+ * Refuses `user=*`, so a whole-domain read walks the extensions.
+ */
+export async function getUcConversations(domain: string, user: string) {
+  return pbxApi("conversation", "read", { domain, user });
+}
+
+/**
+ * Call history for the domain between two UTC times ("YYYY-MM-DD HH:MM:SS").
+ * Rows carry `type` 0 = outgoing, 1 = incoming, 3 = internal, and epoch
+ * seconds in `time_start` / `time_answer` / `time_release`.
+ */
+export async function getCallHistory(domain: string, startDate: string, endDate: string, limit = 500) {
+  return pbxApi("cdr2", "read", { domain, start_date: startDate, end_date: endDate, limit: String(limit) });
+}
+
 export async function getMessages(domain: string, user: string, sessionId: string) {
   return pbxApi("message", "read", { domain, user, session_id: sessionId });
 }

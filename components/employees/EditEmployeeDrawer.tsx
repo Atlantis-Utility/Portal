@@ -467,6 +467,22 @@ export default function EditEmployeeDrawer({ open, onClose, employee }: Props) {
                         </span>
                       );
                     }
+                    // Held through another page (Inbox comes with Messages):
+                    // shown as included, not as a toggle that wouldn't take
+                    // it away.
+                    if (page.impliedBy && access.includes(page.impliedBy) && !access.includes(page.href)) {
+                      const via = NAV_PAGES.find((p) => p.href === page.impliedBy)?.label ?? "another page";
+                      return (
+                        <span
+                          key={page.href}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border bg-[#f5f5f5] text-[#666] border-[#eaeaea]"
+                        >
+                          <Check className="w-3 h-3 shrink-0" />
+                          {page.label}
+                          <span className="text-[10px] text-[#bbb]">with {via}</span>
+                        </span>
+                      );
+                    }
                     const granted = access.includes(page.href);
                     if (!isAdmin) {
                       return (

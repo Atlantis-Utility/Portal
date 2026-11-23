@@ -60,6 +60,14 @@ with **Reseller** scope, plus a separate API application. Hard-won facts:
   (`sendMedia`). Session ids are the same in v1 and v2. It answers 202 with
   no id, `message` must be non-empty, 409 = everyone opted out, 415 = the
   carrier refuses the file type. Verified 2026-11-23.
+- **UC Inbox** (`conversation/read`, `lib/inbox.ts`) returns one
+  extension's chats and voicemails; it refuses `user=*`, so the Inbox walks
+  every extension **three at a time** (more answers 429). It never returns
+  calls here: calls come from `cdr2/read` (`type` 0 out, 1 in, 3 internal;
+  epoch-second times). Voicemail `filedate` is **UTC** despite the row's
+  `TimeZone: US/Pacific` (checked against the call record). A recording's
+  `remotepath` opens **without any login**, so it only ever goes through
+  `/api/inbox/voicemail`, never to the browser.
 - Still refused: `domain/read`, `reseller/read`, and there is no webhook,
   so Messages polls.
 

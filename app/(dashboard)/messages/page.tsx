@@ -1163,7 +1163,11 @@ export default function MessagesPage() {
   const [names, setNames] = useState<Record<string, string>>(cached?.names ?? {});
   const [contacts, setContacts] = useState<Record<string, { name: string; company: string }>>(cached?.contacts ?? {});
   const [annotations, setAnnotations] = useState<Record<string, ThreadAnnotation>>({});
-  const [selected, setSelected] = useState("");
+  // `?session=` opens a conversation directly - the Inbox links here.
+  const [linked] = useState(() =>
+    typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("session") ?? "",
+  );
+  const [selected, setSelected] = useState(linked);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [showDetails, setShowDetails] = useState(true);
@@ -1176,7 +1180,7 @@ export default function MessagesPage() {
   const [mobileDetails, setMobileDetails] = useState(false);
   // Below md there is only room for one pane. Opening a conversation
   // moves to it; a back arrow returns.
-  const [pane, setPane] = useState<"list" | "thread">("list");
+  const [pane, setPane] = useState<"list" | "thread">(linked ? "thread" : "list");
   const [composing, setComposing] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState("");

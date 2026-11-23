@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, MessageSquare, Workflow, BookUser, Users, CalendarDays, KanbanSquare,
-  StickyNote, Plug, ScrollText, Settings2, UserCircle, Circle,
+  StickyNote, Plug, ScrollText, Settings2, UserCircle, Circle, Inbox,
 } from "lucide-react";
 
 /**
@@ -71,6 +71,7 @@ export interface Area {
 export const AREAS: Area[] = [
   { href: "/",             accent: "indigo", icon: LayoutDashboard },
   { href: "/messages",     accent: "blue",   icon: MessageSquare },
+  { href: "/inbox",        accent: "blue",   icon: Inbox },
   { href: "/workflows",    accent: "violet", icon: Workflow },
   { href: "/contacts",     accent: "cyan",   icon: BookUser },
   { href: "/employees",    accent: "orange", icon: Users },

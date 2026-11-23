@@ -16,18 +16,27 @@ export const dynamic = "force-dynamic";
  * CRON_SECRET. Without one configured the route refuses everything rather
  * than running for anybody who finds it.
  */
+// Trimmed on both sides: a value pasted into Vercel or Supabase Vault with a
+// stray space or line break otherwise never matches, and every call is
+// refused with nothing to say why.
+const configuredSecret = () => (process.env.CRON_SECRET ?? "").trim();
+
 function authorised(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET ?? "";
-  if (secret.length < 16) return false;
-  const given = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+  const secret = configuredSecret();
+  const given = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
   const a = Buffer.from(given);
   const b = Buffer.from(secret);
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
 async function handle(req: NextRequest) {
-  if (!process.env.CRON_SECRET) {
+  if (!configuredSecret()) {
     return NextResponse.json({ error: "CRON_SECRET isn't set, so the timer is switched off." }, { status: 503 });
+  }
+  // A short secret is guessable; refuse to run on one, and say so rather
+  // than answering every call with a bare "Not allowed".
+  if (configuredSecret().length < 16) {
+    return NextResponse.json({ error: "CRON_SECRET is too short (16 characters at least), so the timer is switched off." }, { status: 503 });
   }
   if (!authorised(req)) return NextResponse.json({ error: "Not allowed" }, { status: 401 });
 

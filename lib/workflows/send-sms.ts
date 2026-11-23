@@ -1,6 +1,6 @@
 import "server-only";
 import { getErrorMessage } from "@/lib/utils";
-import { getMessageSessions, getMessages, sendMessage, ourDomain } from "@/lib/ringlogix";
+import { getMessageSessions, getMessages, sendMessage, ourDomain, RingLogixError } from "@/lib/ringlogix";
 import {
   digitsOf, extensionOf, normalizeMessage, remoteNumbersOf,
   type RawMessage, type RawMessageSession,
@@ -43,6 +43,27 @@ interface Send {
   numbers: string[];
 }
 
+/**
+ * Retries a RingLogix READ through its occasional 500s.
+ *
+ * The PBX hands back a bare "Internal server error" with an activity id now
+ * and then, and the same request a moment later succeeds; the Messages page
+ * already retries for the same reason. Reads only: a send is never retried,
+ * because a 500 after RingLogix accepted a text would send it twice.
+ */
+async function readWithRetry<T>(read: () => Promise<T>): Promise<T> {
+  const pauses = [700, 2000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await read();
+    } catch (err) {
+      const transient = !(err instanceof RingLogixError) || err.status >= 500;
+      if (!transient || attempt >= pauses.length) throw err;
+      await new Promise((r) => setTimeout(r, pauses[attempt]));
+    }
+  }
+}
+
 export interface SendResult {
   outcome: RunOutcome;
   sentCount: number;
@@ -55,7 +76,7 @@ export async function executeSendSms(
   opts: { live: boolean; byName: string; byEmail: string; budget: number },
 ): Promise<SendResult> {
   const domain = ourDomain();
-  const sessions = ((await getMessageSessions(domain, "*")) ?? []) as RawMessageSession[];
+  const sessions = ((await readWithRetry(() => getMessageSessions(domain, "*"))) ?? []) as RawMessageSession[];
 
   // ── Work out what to send, from the mailbox as it is now ──
   const sends: Send[] = [];
@@ -132,7 +153,15 @@ export async function executeSendSms(
   let budget = opts.budget;
 
   for (const s of sends) {
-    const stopped = s.fromNumber ? await optOut.firstStopped(s.numbers) : null;
+    let stopped: string | null = null;
+    if (s.fromNumber) {
+      try {
+        stopped = await optOut.firstStopped(s.numbers);
+      } catch {
+        detail.push({ to: s.to, ok: false, error: "Couldn't check whether they've opted out (RingLogix didn't answer), so it wasn't sent." });
+        continue;
+      }
+    }
     if (stopped) {
       detail.push({
         to: s.to,
@@ -231,7 +260,9 @@ class OptOutCheck {
     });
     let lastWord: { at: number; stop: boolean } | null = null;
     for (const s of theirs) {
-      const rows = ((await getMessages(this.domain, s.user ?? "", s.session_id ?? "").catch(() => [])) ?? []) as RawMessage[];
+      // Failing closed: if their history can't be read even after retrying,
+      // the caller skips them rather than risk texting someone who said STOP.
+      const rows = ((await readWithRetry(() => getMessages(this.domain, s.user ?? "", s.session_id ?? ""))) ?? []) as RawMessage[];
       for (const raw of rows) {
         const m = normalizeMessage(raw, { owner: s.user ?? "" });
         if (m.direction !== "in") continue;

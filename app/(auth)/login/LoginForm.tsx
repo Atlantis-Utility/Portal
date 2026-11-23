@@ -130,16 +130,17 @@ export default function LoginForm() {
   return (
     <div className="w-full max-w-sm">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 justify-center mb-8">
-        <div className="w-8 h-8 rounded-xl bg-[#0a0a0a] flex items-center justify-center shrink-0">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-            <path d="M8 2L14 13H2L8 2Z" fill="white" fillOpacity="0.9" />
-          </svg>
-        </div>
-        <span className="text-[17px] font-semibold text-[#0a0a0a] tracking-tight">Atlantis Portal</span>
+      {/* The wide-screen panel carries the brand; on a phone it's here. */}
+      <div className="flex lg:hidden items-center gap-2.5 justify-center mb-8">
+        <span className="brand-mark w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold">A</span>
+        <span className="text-[17px] font-semibold text-fg tracking-tight">Atlantis Portal</span>
+      </div>
+      <div className="hidden lg:block mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">Welcome back</h1>
+        <p className="text-sm text-fg-muted mt-1">Sign in to your Atlantis Portal.</p>
       </div>
 
-      <div className="bg-white border border-[#eaeaea] rounded-2xl p-8 shadow-sm">
+      <div className="bg-surface border border-line rounded-2xl p-8 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-12px_rgba(0,0,0,0.12)]">
         {forgot ? (
           sent ? (
             <>

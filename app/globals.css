@@ -3,15 +3,70 @@
 /* Class-based dark mode for Tailwind v4 */
 @variant dark (&:where(.dark.dark *));
 
+/* ── Design tokens ───────────────────────────────────────────────────────────
+   Every colour new UI uses comes from here, as a pair: a light value on
+   :root and its dark counterpart on html.dark. Tailwind classes built on
+   them (bg-surface, text-fg, bg-tint-blue, text-ink-violet…) therefore
+   switch with the theme by themselves - nothing to add to the override
+   list below, which exists only for the older hard-coded hex classes.
+
+   ink-*  : the strong accent (icons, active marks, primary buttons)
+   tint-* : its soft background (chips, icon tiles, selected rows)
+   Each area of the app owns one accent (lib/areas.ts).
+   ─────────────────────────────────────────────────────────────────────────── */
 :root {
   --background: #ffffff;
   --foreground: #0a0a0a;
+
+  --canvas: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #fafafa;
+  --surface-3: #f4f4f5;
+  --line: #eaeaea;
+  --line-strong: #d4d4d8;
+  --fg: #0a0a0a;
+  --fg-muted: #666666;
+  --fg-subtle: #999999;
+
+  --ink-indigo: #4f46e5; --tint-indigo: #eef2ff;
+  --ink-blue:   #0070f3; --tint-blue:   #eff6ff;
+  --ink-violet: #7c3aed; --tint-violet: #f5f3ff;
+  --ink-teal:   #0d9488; --tint-teal:   #f0fdfa;
+  --ink-cyan:   #0891b2; --tint-cyan:   #ecfeff;
+  --ink-amber:  #d97706; --tint-amber:  #fffbeb;
+  --ink-orange: #ea580c; --tint-orange: #fff7ed;
+  --ink-green:  #16a34a; --tint-green:  #f0fdf4;
+  --ink-pink:   #db2777; --tint-pink:   #fdf2f8;
+  --ink-rose:   #e11d48; --tint-rose:   #fff1f2;
+  --ink-slate:  #475569; --tint-slate:  #f1f5f9;
 }
 
 html.dark {
   color-scheme: dark;
   --background: #111111;
   --foreground: #f0f0f0;
+
+  --canvas: #0a0a0a;
+  --surface: #111111;
+  --surface-2: #171717;
+  --surface-3: #1f1f1f;
+  --line: #2e2e2e;
+  --line-strong: #3f3f46;
+  --fg: #f0f0f0;
+  --fg-muted: #a1a1a1;
+  --fg-subtle: #717171;
+
+  --ink-indigo: #818cf8; --tint-indigo: #1a1b3a;
+  --ink-blue:   #3b9eff; --tint-blue:   #0f1a2d;
+  --ink-violet: #a78bfa; --tint-violet: #1e1533;
+  --ink-teal:   #2dd4bf; --tint-teal:   #0b2422;
+  --ink-cyan:   #22d3ee; --tint-cyan:   #0c2226;
+  --ink-amber:  #fbbf24; --tint-amber:  #261c0a;
+  --ink-orange: #fb923c; --tint-orange: #2a160a;
+  --ink-green:  #4ade80; --tint-green:  #0f2318;
+  --ink-pink:   #f472b6; --tint-pink:   #2a1020;
+  --ink-rose:   #fb7185; --tint-rose:   #2a0f15;
+  --ink-slate:  #94a3b8; --tint-slate:  #1a1f27;
 }
 
 @theme inline {
@@ -19,6 +74,47 @@ html.dark {
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+
+  --color-ink-indigo: var(--ink-indigo); --color-tint-indigo: var(--tint-indigo);
+  --color-ink-blue: var(--ink-blue);     --color-tint-blue: var(--tint-blue);
+  --color-ink-violet: var(--ink-violet); --color-tint-violet: var(--tint-violet);
+  --color-ink-teal: var(--ink-teal);     --color-tint-teal: var(--tint-teal);
+  --color-ink-cyan: var(--ink-cyan);     --color-tint-cyan: var(--tint-cyan);
+  --color-ink-amber: var(--ink-amber);   --color-tint-amber: var(--tint-amber);
+  --color-ink-orange: var(--ink-orange); --color-tint-orange: var(--tint-orange);
+  --color-ink-green: var(--ink-green);   --color-tint-green: var(--tint-green);
+  --color-ink-pink: var(--ink-pink);     --color-tint-pink: var(--tint-pink);
+  --color-ink-rose: var(--ink-rose);     --color-tint-rose: var(--tint-rose);
+  --color-ink-slate: var(--ink-slate);   --color-tint-slate: var(--tint-slate);
+}
+
+/* The soft glow at the top of each page, in its area's colour. Set
+   --area-ink on an ancestor (DashboardShell does) and this follows. */
+.area-glow {
+  background:
+    radial-gradient(60rem 18rem at 15% -6rem, color-mix(in srgb, var(--area-ink, #0070f3) 14%, transparent), transparent 70%),
+    radial-gradient(40rem 14rem at 85% -8rem, color-mix(in srgb, var(--area-ink, #0070f3) 8%, transparent), transparent 70%);
+}
+html.dark .area-glow {
+  background:
+    radial-gradient(60rem 18rem at 15% -6rem, color-mix(in srgb, var(--area-ink, #3b9eff) 18%, transparent), transparent 70%),
+    radial-gradient(40rem 14rem at 85% -8rem, color-mix(in srgb, var(--area-ink, #3b9eff) 10%, transparent), transparent 70%);
+}
+
+/* The brand mark: a small gradient tile. */
+.brand-mark {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 45%, #0070f3 100%);
+  box-shadow: 0 1px 0 rgba(255,255,255,.25) inset, 0 4px 14px -4px rgba(79,70,229,.55);
 }
 
 * {

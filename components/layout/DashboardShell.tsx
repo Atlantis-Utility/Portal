@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useRef, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
 import GlobalSearch from "./GlobalSearch";
 import { Menu, Bell, LogOut, User, ChevronDown } from "lucide-react";
 import { getUnreadCount } from "@/lib/notifications";
-import { hasPageAccess } from "@/lib/nav-pages";
+import { hasPageAccess, NAV_PAGES } from "@/lib/nav-pages";
+import { ACCENT, areaFor } from "@/lib/areas";
 import { useAuth } from "@/lib/auth-context";
 import { getInitials } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ function subscribeNotifications(onChange: () => void) {
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { authUser, logout } = useAuth();
 
   // AuthGuard renders a spinner until sign-in resolves, so this shell never
@@ -83,14 +85,36 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   const displayName = authUser?.displayName ?? "User";
   const userEmail   = authUser?.email ?? "";
 
+  const area = areaFor(pathname);
+  const accent = ACCENT[area.accent];
+  const AreaIcon = area.icon;
+  const pageLabel =
+    NAV_PAGES.find((p) => p.href === area.href)?.label ??
+    (area.href === "/account" ? "My profile" : "");
+  const initials = getInitials(displayName);
+
+  const bell = (
+    <Link
+      href={notificationsHref}
+      className="relative flex items-center justify-center w-9 h-9 rounded-lg text-fg-muted hover:bg-surface-3 hover:text-fg transition-colors"
+      aria-label="Notifications"
+    >
+      <Bell className="w-4 h-4" />
+      {unreadCount > 0 && (
+        <span className="absolute top-1 right-1 min-w-4 h-4 px-1 rounded-full bg-ink-rose text-white text-[9px] font-bold flex items-center justify-center leading-none ring-2 ring-surface">
+          {unreadCount > 9 ? "9+" : unreadCount}
+        </span>
+      )}
+    </Link>
+  );
+
   return (
-    <div className="flex h-screen overflow-hidden bg-[#fafafa]">
-      {/* Mobile backdrop */}
+    <div
+      className="flex h-screen overflow-hidden bg-canvas"
+      style={{ "--area-ink": accent.cssInk } as React.CSSProperties}
+    >
       {mobileOpen && (
-        <div
-          className="fixed inset-0 bg-black/30 z-30 md:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-30 md:hidden" onClick={() => setMobileOpen(false)} />
       )}
 
       <Sidebar
@@ -100,110 +124,97 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         onMobileClose={() => setMobileOpen(false)}
         allowedHrefs={allowedHrefs}
         userDisplayName={displayName}
-        userInitials={getInitials(displayName)}
+        userInitials={initials}
         userSubtext={authUser?.employeeAccessRole || (authUser?.isAdmin ? "Administrator" : "Contributor")}
       />
 
       <main
-        className={`flex-1 flex flex-col min-h-0 overflow-hidden transition-[margin] duration-200 ease-in-out ${
-          collapsed ? "md:ml-16" : "md:ml-60"
+        className={`relative flex-1 flex flex-col min-h-0 overflow-hidden transition-[margin] duration-200 ease-in-out ${
+          collapsed ? "md:ml-17" : "md:ml-64"
         }`}
       >
-        {/* Mobile top bar — search moves to its own row below, since the
-            desktop bar it normally lives in is hidden at this width. */}
-        <div className="md:hidden sticky top-0 z-20 flex items-center h-14 px-4 bg-white border-b border-[#eaeaea]">
+        {/* The area's colour, as a soft glow behind the top of the page. */}
+        <div className="area-glow pointer-events-none absolute inset-x-0 top-0 h-72 z-0" aria-hidden />
+
+        {/* ── Top bar ── */}
+        <header className="relative z-20 shrink-0 flex items-center gap-3 h-14 px-3 md:px-6 border-b border-line bg-surface/70 backdrop-blur-xl">
           <button
             onClick={() => setMobileOpen(true)}
-            className="p-1.5 rounded-lg hover:bg-[#f5f5f5] transition-colors"
+            className="md:hidden flex items-center justify-center w-9 h-9 rounded-lg text-fg hover:bg-surface-3 transition-colors"
             aria-label="Open navigation"
           >
-            <Menu className="w-5 h-5 text-[#0a0a0a]" />
+            <Menu className="w-5 h-5" />
           </button>
-          <div className="flex items-center gap-2 ml-2 flex-1">
-            <span className="text-[13px] font-semibold text-[#0a0a0a]">Atlantis Portal</span>
+
+          {/* Where you are */}
+          <nav className="flex items-center gap-2 min-w-0" aria-label="Breadcrumb">
+            <span className="hidden sm:inline text-[13px] text-fg-subtle whitespace-nowrap">Atlantis Portal</span>
+            <span className="hidden sm:inline text-line-strong">/</span>
+            <span className={`flex items-center justify-center w-6 h-6 rounded-md shrink-0 ${accent.tile}`}>
+              <AreaIcon className="w-3.5 h-3.5" />
+            </span>
+            <span className="text-[13px] font-medium text-fg truncate">{pageLabel}</span>
+          </nav>
+
+          <div className="hidden md:block flex-1 max-w-md mx-auto">
+            <GlobalSearch allowedHrefs={allowedHrefs} />
           </div>
-          <div className="flex items-center gap-1">
-            <Link href={notificationsHref} className="relative p-1.5 rounded-lg hover:bg-[#f5f5f5] transition-colors" aria-label="Notifications">
-              <Bell className="w-4 h-4 text-[#666]" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#0a0a0a] text-white text-[8px] font-bold flex items-center justify-center leading-none">
-                  {unreadCount > 9 ? "9+" : unreadCount}
+          <div className="flex-1 md:hidden" />
+
+          <div className="flex items-center gap-1 shrink-0">
+            {bell}
+            <div className="relative" ref={profileRef}>
+              <button
+                onClick={() => setProfileOpen((o) => !o)}
+                className="flex items-center gap-2 rounded-lg hover:bg-surface-3 pl-1 pr-1.5 py-1 transition-colors"
+                aria-label="Your account"
+              >
+                <span className="w-7 h-7 rounded-full bg-linear-to-br from-ink-indigo to-ink-violet flex items-center justify-center shrink-0">
+                  <span className="text-white text-[10px] font-semibold">{initials}</span>
                 </span>
+                <ChevronDown className={`hidden sm:block w-3.5 h-3.5 text-fg-subtle transition-transform ${profileOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {profileOpen && (
+                <div className="absolute right-0 top-full mt-2 w-60 bg-surface border border-line rounded-xl shadow-xl z-50 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-line flex items-center gap-3">
+                    <span className="w-9 h-9 rounded-full bg-linear-to-br from-ink-indigo to-ink-violet flex items-center justify-center shrink-0">
+                      <span className="text-white text-xs font-semibold">{initials}</span>
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-fg truncate">{displayName}</span>
+                      <span className="block text-[11px] text-fg-subtle truncate">{userEmail}</span>
+                    </span>
+                  </div>
+                  <div className="p-1">
+                    <Link
+                      href="/account"
+                      onClick={() => setProfileOpen(false)}
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-fg hover:bg-surface-3 transition-colors"
+                    >
+                      <User className="w-4 h-4 text-fg-muted" /> Your profile
+                    </Link>
+                    <button
+                      onClick={() => { setProfileOpen(false); handleLogout(); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-ink-rose hover:bg-tint-rose transition-colors"
+                    >
+                      <LogOut className="w-4 h-4" /> Sign out
+                    </button>
+                  </div>
+                </div>
               )}
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="p-1.5 rounded-lg hover:bg-[#f5f5f5] transition-colors"
-              data-tip="Sign out"
-            >
-              <LogOut className="w-4 h-4 text-[#666]" />
-            </button>
+            </div>
           </div>
-        </div>
+        </header>
 
-        <div className="md:hidden px-4 py-2.5 bg-white border-b border-[#eaeaea]">
+        {/* Search gets its own row on phones, where the bar has no room. */}
+        <div className="md:hidden relative z-10 px-3 py-2.5 border-b border-line bg-surface/70 backdrop-blur-xl">
           <GlobalSearch allowedHrefs={allowedHrefs} />
         </div>
 
-        {/* Desktop user bar at top (visible in desktop when sidebar is shown) */}
-        <div className="hidden md:flex items-center justify-between gap-4 px-8 h-14 border-b border-[#f5f5f5]">
-          <GlobalSearch allowedHrefs={allowedHrefs} />
-          <div className="flex items-center gap-3 shrink-0">
-          <Link href={notificationsHref} className="relative p-1.5 rounded-lg hover:bg-[#f5f5f5] transition-colors" aria-label="Notifications">
-            <Bell className="w-4 h-4 text-[#666]" />
-            {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#0a0a0a] text-white text-[8px] font-bold flex items-center justify-center leading-none">
-                {unreadCount > 9 ? "9+" : unreadCount}
-              </span>
-            )}
-          </Link>
-          <div className="relative pl-3 border-l border-[#f0f0f0]" ref={profileRef}>
-            <button
-              onClick={() => setProfileOpen((o) => !o)}
-              className="flex items-center gap-2 rounded-lg hover:bg-[#f5f5f5] px-1.5 py-1 transition-colors"
-            >
-              <div className="w-7 h-7 rounded-full bg-[#0a0a0a] flex items-center justify-center shrink-0">
-                <span className="text-white text-[10px] font-semibold">{displayName.charAt(0).toUpperCase()}</span>
-              </div>
-              <div className="hidden lg:block text-left">
-                <p className="text-sm font-medium text-[#0a0a0a] leading-none">{displayName}</p>
-                <p className="text-xs text-[#999] mt-0.5 leading-none">{userEmail}</p>
-              </div>
-              <ChevronDown className={`w-3.5 h-3.5 text-[#999] transition-transform ${profileOpen ? "rotate-180" : ""}`} />
-            </button>
-
-            {profileOpen && (
-              <div className="absolute right-0 top-full mt-2 w-52 bg-white border border-[#eaeaea] rounded-xl shadow-lg z-50 overflow-hidden">
-                {/* Header */}
-                <div className="px-4 py-3 border-b border-[#f5f5f5]">
-                  <p className="text-xs font-semibold text-[#0a0a0a] truncate">{displayName}</p>
-                  <p className="text-[10px] text-[#999] truncate mt-0.5">{userEmail}</p>
-                </div>
-                {/* Items */}
-                <div className="py-1">
-                  <Link
-                    href="/account"
-                    onClick={() => setProfileOpen(false)}
-                    className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#0a0a0a] hover:bg-[#fafafa] transition-colors"
-                  >
-                    <User className="w-3.5 h-3.5 text-[#666]" />
-                    View Profile
-                  </Link>
-                  <button
-                    onClick={() => { setProfileOpen(false); handleLogout(); }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#dc2626] hover:bg-[#fef2f2] transition-colors"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    Sign Out
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-          </div>
+        <div className="relative z-10 flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8">
+          <div className="mx-auto w-full max-w-350">{children}</div>
         </div>
-
-        <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8">{children}</div>
       </main>
     </div>
   );

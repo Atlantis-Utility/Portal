@@ -87,7 +87,6 @@ export default function DashboardShell({ children }: { children: React.ReactNode
 
   const area = areaFor(pathname);
   const accent = ACCENT[area.accent];
-  const AreaIcon = area.icon;
   const pageLabel =
     NAV_PAGES.find((p) => p.href === area.href)?.label ??
     (area.href === "/account" ? "My profile" : "");
@@ -146,17 +145,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
             <Menu className="w-5 h-5" />
           </button>
 
-          {/* Where you are */}
-          <nav className="flex items-center gap-2 min-w-0" aria-label="Breadcrumb">
-            <span className="hidden sm:inline text-[13px] text-fg-subtle whitespace-nowrap">Atlantis Portal</span>
-            <span className="hidden sm:inline text-line-strong">/</span>
-            <span className={`flex items-center justify-center w-6 h-6 rounded-md shrink-0 ${accent.tile}`}>
-              <AreaIcon className="w-3.5 h-3.5" />
-            </span>
-            <span className="text-[13px] font-medium text-fg truncate">{pageLabel}</span>
-          </nav>
 
-          <div className="hidden md:block flex-1 max-w-md mx-auto">
+          <div className="hidden md:block flex-1 max-w-md">
             <GlobalSearch allowedHrefs={allowedHrefs} />
           </div>
           <div className="flex-1 md:hidden" />
@@ -213,7 +203,15 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         </div>
 
         <div className="relative z-10 flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-8">
-          <div className="mx-auto w-full max-w-350">{children}</div>
+          <div className="mx-auto w-full max-w-350">
+            {pageLabel && (
+              <p className="text-xs text-fg-subtle mb-2">
+                Atlantis Portal <span className="mx-1 text-line-strong">/</span>{" "}
+                <span className="text-fg-muted">{pageLabel}</span>
+              </p>
+            )}
+            {children}
+          </div>
         </div>
       </main>
     </div>

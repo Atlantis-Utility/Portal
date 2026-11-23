@@ -1,4 +1,5 @@
 import { MessageSquare, Workflow, Plug, PhoneCall } from "lucide-react";
+import BrandMark from "@/components/ui/BrandMark";
 
 const POINTS = [
   { icon: MessageSquare, title: "Every text, one inbox", body: "Your numbers' conversations, groups and contacts, shared by the team.", tile: "bg-tint-blue text-ink-blue" },
@@ -38,7 +39,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         />
 
         <div className="relative flex items-center gap-3">
-          <span className="brand-mark w-10 h-10 rounded-xl flex items-center justify-center text-white text-base font-bold">A</span>
+          <BrandMark size={40} />
           <span>
             <span className="block text-base font-semibold text-fg leading-tight">Atlantis Portal</span>
             <span className="block text-xs text-fg-subtle leading-tight">by Atlantis Utility</span>

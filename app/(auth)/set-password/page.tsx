@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import BrandMark from "@/components/ui/BrandMark";
 import { supabase } from "@/lib/supabase/client";
 
 /**
@@ -82,7 +83,7 @@ function SetPasswordForm() {
   return (
     <div className="w-full max-w-sm">
       <div className="flex lg:hidden items-center gap-2.5 justify-center mb-8">
-        <span className="brand-mark w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold">A</span>
+        <BrandMark size={32} />
         <span className="text-[17px] font-semibold text-fg tracking-tight">Atlantis Portal</span>
       </div>
 

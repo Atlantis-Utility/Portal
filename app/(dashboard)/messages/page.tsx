@@ -1186,7 +1186,7 @@ export default function MessagesPage() {
     // The viewport exactly, so the page itself never scrolls: the shell
     // is 100vh with a bar and its own padding. dvh on small screens,
     // where the browser's own chrome comes and goes as you scroll.
-    <div className="flex flex-col h-[calc(100dvh-11.5rem)] md:h-[calc(100vh-7.5rem)] min-h-125 md:min-h-0">
+    <div className="flex flex-col h-[calc(100dvh-13rem)] md:h-[calc(100vh-9rem)] min-h-125 md:min-h-0">
       {scheduling && (
         <ScheduledMessages
           conversations={conversations.map((c) => ({

@@ -111,11 +111,10 @@ html.dark .area-glow {
     radial-gradient(40rem 14rem at 85% -8rem, color-mix(in srgb, var(--area-ink, #3b9eff) 10%, transparent), transparent 70%);
 }
 
-/* The brand mark: a small gradient tile. */
-.brand-mark {
-  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 45%, #0070f3 100%);
-  box-shadow: 0 1px 0 rgba(255,255,255,.25) inset, 0 4px 14px -4px rgba(79,70,229,.55);
-}
+/* The Atlantis mark (components/ui/BrandMark.tsx): black, as it always was,
+   and inverted at night. */
+.brand-mark { background: #0a0a0a; color: #ffffff; }
+html.dark .brand-mark { background: #f0f0f0; color: #0a0a0a; }
 
 * {
   box-sizing: border-box;

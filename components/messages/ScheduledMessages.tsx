@@ -5,7 +5,7 @@ import Select from "@/components/ui/Select";
 import {
   CalendarClock, X, Plus, Pause, Play, Ban, Trash2, Pencil, RefreshCw, ChevronDown, ChevronRight,
   Users, MessageSquare, FlaskConical, AlertCircle, Search, MoreHorizontal, ArrowLeft, Repeat as RepeatIcon,
-  CheckCircle2, Clock, Zap, FileText, Send, CalendarCheck, Receipt, Wrench, PartyPopper,
+  CheckCircle2, Clock, Zap, FileText, Send, LayoutTemplate,
 } from "lucide-react";
 import Overlay from "@/components/ui/Overlay";
 import DateTimePicker from "@/components/ui/DateTimePicker";
@@ -18,6 +18,7 @@ import {
 } from "@/lib/workflows/types";
 import { fromLocalInput, showTime, toLocalInput, upcomingRuns } from "@/lib/workflows/schedule";
 import { checkScheduledSms, tenDigits } from "@/lib/workflows/validate";
+import { TEMPLATES, TEMPLATE_CATEGORIES, type Template, type TemplateCategory } from "@/lib/workflows/templates";
 
 export interface ScheduleConversation {
   sessionId: string;
@@ -46,45 +47,7 @@ interface Props {
   inline?: boolean;
 }
 
-/** A starting point: what a template fills into a new workflow. */
-interface Template {
-  id: string;
-  name: string;
-  blurb: string;
-  icon: React.ElementType;
-  text: string;
-  repeat: Repeat;
-}
-
-const TEMPLATES: Template[] = [
-  {
-    id: "appointment", name: "Appointment reminder", icon: CalendarCheck, repeat: "none",
-    blurb: "A day-before reminder with a quick way to confirm.",
-    text: "Hi! A reminder of your appointment with Atlantis Utility tomorrow at [time]. Reply C to confirm or R to reschedule.",
-  },
-  {
-    id: "payment", name: "Payment reminder", icon: Receipt, repeat: "monthly",
-    blurb: "A friendly monthly nudge before an invoice is due.",
-    text: "Hi, a friendly reminder that your Atlantis Utility invoice is due on [date]. Questions? Just reply to this text.",
-  },
-  {
-    id: "maintenance", name: "Maintenance notice", icon: Wrench, repeat: "none",
-    blurb: "Tell customers about planned work before it happens.",
-    text: "Heads up: planned maintenance tonight from 11pm to 1am may briefly interrupt your phone service. Thanks for your patience.",
-  },
-  {
-    id: "checkin", name: "Weekly check-in", icon: RepeatIcon, repeat: "weekly",
-    blurb: "A standing weekly message to a person or group.",
-    text: "Hi! Just checking in for the week. Anything we can help with? Reply here any time.",
-  },
-  {
-    id: "holiday", name: "Holiday hours", icon: PartyPopper, repeat: "none",
-    blurb: "Let people know when the office is closed.",
-    text: "Our office will be closed on [date] for the holiday. For urgent service issues, reply URGENT and we'll get back to you.",
-  },
-];
-
-type View = { mode: "list" } | { mode: "edit"; workflow: Workflow | null; template?: Template | null };
+type View = { mode: "list" } | { mode: "templates" } | { mode: "edit"; workflow: Workflow | null; template?: Template | null };
 type Filter = "all" | WorkflowStatus;
 
 const STATUS: Record<WorkflowStatus, { label: string; dot: string; text: string }> = {
@@ -231,6 +194,23 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
     return inline ? editor : <Modal onClose={onClose}>{editor}</Modal>;
   }
 
+  // ── Browsing templates ──
+  if (view.mode === "templates") {
+    const gallery = (
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <button onClick={() => setView({ mode: "list" })} className="flex items-center gap-1.5 text-[13px] text-fg-muted hover:text-fg">
+            <ArrowLeft className="w-4 h-4" /> Back
+          </button>
+          <span className="text-line-strong">/</span>
+          <p className="text-sm font-semibold text-fg">Templates</p>
+        </div>
+        <Templates onPick={startNew} showBlank={false} />
+      </div>
+    );
+    return inline ? gallery : <Modal onClose={onClose} title="Templates"><div className="p-4">{gallery}</div></Modal>;
+  }
+
   // ── The list ──
   const list = (
     <div className="space-y-5">
@@ -299,6 +279,12 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
                 className="w-full h-8 text-[13px] bg-surface-2 border border-line rounded-lg pl-8 pr-3 outline-none focus:border-line-strong focus:bg-surface transition-colors"
               />
             </div>
+            <button
+              onClick={() => setView({ mode: "templates" })}
+              className="flex items-center gap-1.5 border border-line bg-surface text-fg text-[13px] font-medium rounded-lg px-3 h-8 hover:bg-surface-2 transition-colors"
+            >
+              <LayoutTemplate className="w-3.5 h-3.5" /> Templates
+            </button>
             {inline && (
               <button
                 onClick={() => startNew()}
@@ -573,44 +559,87 @@ function Row({
 
 // ── Empty state: start from a template ───────────────────────────────────
 
-function Templates({ onPick }: { onPick: (t: Template | null) => void }) {
+function Templates({ onPick, showBlank = true }: { onPick: (t: Template | null) => void; showBlank?: boolean }) {
+  const [category, setCategory] = useState<TemplateCategory | "all">("all");
+  const [q, setQ] = useState("");
+  const query = q.trim().toLowerCase();
+  const shown = TEMPLATES.filter((t) =>
+    (category === "all" || t.category === category) &&
+    (!query || t.name.toLowerCase().includes(query) || t.blurb.toLowerCase().includes(query) || t.text.toLowerCase().includes(query)),
+  );
+  const countIn = (c: TemplateCategory) => TEMPLATES.filter((t) => t.category === c).length;
+
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-dashed border-line-strong bg-surface px-6 py-8 text-center">
-        <span className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-surface-3 text-fg-muted mb-3">
-          <CalendarClock className="w-5 h-5" />
-        </span>
-        <p className="text-base font-semibold text-fg">No workflows yet</p>
-        <p className="text-sm text-fg-muted mt-1 max-w-md mx-auto">
-          Send texts on their own: reminders, notices and follow-ups, once or on a repeat. Start from a template or a blank one.
-        </p>
-        <button
-          onClick={() => onPick(null)}
-          className="mt-4 inline-flex items-center gap-2 bg-fg text-surface text-sm font-medium rounded-lg px-3.5 h-9 hover:opacity-90"
-        >
-          <Plus className="w-4 h-4" /> Blank workflow
-        </button>
-      </div>
-      <div>
-        <p className="text-[11px] font-medium uppercase tracking-wider text-fg-subtle mb-2.5">Templates</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-          {TEMPLATES.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => onPick(t)}
-              className="group text-left rounded-xl border border-line bg-surface p-4 hover:border-line-strong hover:shadow-sm transition-all"
-            >
-              <div className="flex items-center justify-between">
-                <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-surface-3 text-fg-muted group-hover:text-fg">
-                  <t.icon className="w-4 h-4" />
-                </span>
-                <span className="text-[11px] text-fg-subtle">{REPEAT_LABELS[t.repeat]}</span>
-              </div>
-              <p className="text-sm font-medium text-fg mt-3">{t.name}</p>
-              <p className="text-[12px] text-fg-muted mt-0.5">{t.blurb}</p>
-            </button>
-          ))}
+      {showBlank && (
+        <div className="rounded-xl border border-dashed border-line-strong bg-surface px-6 py-8 text-center">
+          <span className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-surface-3 text-fg-muted mb-3">
+            <CalendarClock className="w-5 h-5" />
+          </span>
+          <p className="text-base font-semibold text-fg">No workflows yet</p>
+          <p className="text-sm text-fg-muted mt-1 max-w-md mx-auto">
+            Send texts on their own: reminders, notices and follow-ups, once or on a repeat. Start from one of {TEMPLATES.length} templates below, or a blank one.
+          </p>
+          <button
+            onClick={() => onPick(null)}
+            className="mt-4 inline-flex items-center gap-2 bg-fg text-surface text-sm font-medium rounded-lg px-3.5 h-9 hover:opacity-90"
+          >
+            <Plus className="w-4 h-4" /> Blank workflow
+          </button>
         </div>
+      )}
+
+      <div className="bg-surface border border-line rounded-xl">
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-line">
+          <div className="flex items-center gap-1 overflow-x-auto">
+            {(["all", ...TEMPLATE_CATEGORIES] as const).map((c) => (
+              <button
+                key={c}
+                onClick={() => setCategory(c)}
+                className={`flex items-center gap-1.5 rounded-lg px-2.5 h-8 text-[13px] font-medium whitespace-nowrap transition-colors ${
+                  category === c ? "bg-surface-3 text-fg" : "text-fg-muted hover:text-fg hover:bg-surface-2"
+                }`}
+              >
+                {c === "all" ? "All" : c}
+                <span className="text-[11px] tabular-nums text-fg-subtle">{c === "all" ? TEMPLATES.length : countIn(c)}</span>
+              </button>
+            ))}
+          </div>
+          <div className="relative ml-auto w-full sm:w-56">
+            <Search className="w-3.5 h-3.5 text-fg-subtle absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search templates"
+              className="w-full h-8 text-[13px] bg-surface-2 border border-line rounded-lg pl-8 pr-3 outline-none focus:border-line-strong focus:bg-surface transition-colors"
+            />
+          </div>
+        </div>
+
+        {shown.length === 0 ? (
+          <p className="px-5 py-10 text-center text-sm text-fg-muted">No template matches.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 p-4">
+            {shown.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => onPick(t)}
+                className="group text-left rounded-xl border border-line bg-surface p-4 hover:border-line-strong hover:shadow-sm transition-all flex flex-col"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-surface-3 text-fg-muted group-hover:text-fg">
+                    <t.icon className="w-4 h-4" />
+                  </span>
+                  <span className="text-[11px] text-fg-subtle">{REPEAT_LABELS[t.repeat]}</span>
+                </div>
+                <p className="text-sm font-medium text-fg mt-3">{t.name}</p>
+                <p className="text-[12px] text-fg-muted mt-0.5">{t.blurb}</p>
+                <p className="text-[12px] text-fg-subtle mt-2 line-clamp-2 italic">“{t.text}”</p>
+                <span className="mt-3 text-[11px] font-medium text-fg-subtle">{t.category}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -926,18 +955,19 @@ function Editor({
 
           <Step n={2} title="Message" hint="What they'll receive">
             {!workflow && (
-              <div className="flex flex-wrap gap-1.5">
-                {TEMPLATES.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => { setText(t.text); if (!name) setName(t.name); }}
-                    className="inline-flex items-center gap-1.5 text-[12px] text-fg-muted border border-line rounded-full px-2.5 py-1 hover:text-fg hover:border-line-strong"
-                  >
-                    <t.icon className="w-3 h-3" /> {t.name}
-                  </button>
-                ))}
-              </div>
+              <Select
+                value=""
+                onChange={(id) => {
+                  const t = TEMPLATES.find((x) => x.id === id);
+                  if (!t) return;
+                  setText(t.text);
+                  if (!name) setName(t.name);
+                  if (repeat === "none") setRepeat(t.repeat);
+                }}
+                options={TEMPLATES.map((t) => ({ value: t.id, label: `${t.category} · ${t.name}` }))}
+                placeholder="Start from a template…"
+                searchable
+              />
             )}
             <textarea className={`${field} resize-none leading-relaxed`} rows={6} value={text} onChange={(e) => setText(e.target.value)} placeholder="Write the text…" />
             <div className="flex items-center justify-between text-[12px]">

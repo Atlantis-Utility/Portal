@@ -110,12 +110,12 @@ export async function GET() {
     const contacts: Record<string, { name: string; company: string }> = {};
     for (const entries of books) {
       for (const entry of entries ?? []) {
-        const name = `${entry.first_name ?? ""} ${entry.last_name ?? ""}`.replace(/s+/g, " ").trim();
+        const name = `${entry.first_name ?? ""} ${entry.last_name ?? ""}`.replace(/\s+/g, " ").trim();
         if (!name) continue;
         for (const field of ["cell_phone", "work_phone", "home_phone"]) {
           // Last ten digits, so "805-816-8896" and "18058168896" are one
           // number rather than two.
-          const digits = (entry[field] ?? "").replace(/D/g, "").slice(-10);
+          const digits = (entry[field] ?? "").replace(/\D/g, "").slice(-10);
           if (digits.length === 10 && !contacts[digits]) {
             contacts[digits] = { name, company: (entry.company ?? "").trim() };
           }

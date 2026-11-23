@@ -336,8 +336,13 @@ export default function ContactsPage() {
                     <td className="px-4 py-3 text-sm text-[#666] font-mono">{c.home_phone ? formatPhone(c.home_phone) : "-"}</td>
                     <td className="px-4 py-3 text-sm text-[#666]">{c.email || "-"}</td>
                     <td className="px-4 py-3">
-                      {c.tags ? (
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-[#f1f1f1] text-[#666]">{c.tags}</span>
+                      {/* RingLogix stores tags as ",post,vip," - one chip each. */}
+                      {(c.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean).length > 0 ? (
+                        <span className="flex flex-wrap gap-1">
+                          {(c.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean).map((t) => (
+                            <span key={t} className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-[#f1f1f1] text-[#666]">{t}</span>
+                          ))}
+                        </span>
                       ) : (
                         <span className="text-sm text-[#999]">-</span>
                       )}

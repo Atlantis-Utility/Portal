@@ -1,5 +1,6 @@
 import { tenantDomain } from "@/lib/tenancy";
 import { NextRequest, NextResponse } from "next/server";
+import { requireConversation } from "@/lib/messages/access";
 import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
 import { getMessageSessions, setMessageSessionStatus, isConfigured } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
@@ -33,6 +34,7 @@ export async function POST(req: NextRequest) {
     const domain = await tenantDomain();
     const read = Boolean(body.read);
     if (!sessionId) return NextResponse.json({ error: "Which conversation?" }, { status: 400 });
+    await requireConversation(sessionId);
 
     const sessions = ((await getMessageSessions(domain, body.user?.trim() || "*")) ?? []) as RawMessageSession[];
     const session = sessions.find((s) => s.session_id === sessionId);

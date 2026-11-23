@@ -1,5 +1,6 @@
 import { tenantDomain } from "@/lib/tenancy";
 import { NextRequest, NextResponse } from "next/server";
+import { requireConversation } from "@/lib/messages/access";
 import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
 import { getMessageSessions, sendMessage, isConfigured } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `That's ${text.length} characters; the limit is ${MAX_LENGTH}.` }, { status: 400 });
     }
     if (!sessionId) return NextResponse.json({ error: "Which conversation?" }, { status: 400 });
+    await requireConversation(sessionId);
 
     // The destination comes from the conversation, never from the caller.
     const sessions = ((await getMessageSessions(domain, user || "*")) ?? []) as RawMessageSession[];

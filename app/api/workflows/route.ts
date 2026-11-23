@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getErrorMessage } from "@/lib/utils";
+import { requireConversation } from "@/lib/messages/access";
 import { requirePageOption, ApiAuthError } from "@/lib/api-auth";
 import { createWorkflow, listWorkflows } from "@/lib/workflows/store";
 import { checkScheduledSms } from "@/lib/workflows/validate";
@@ -40,6 +41,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const checked = checkScheduledSms(body, Date.now());
     if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
+    // Nobody schedules texts into a conversation they aren't allowed to see.
+    if (checked.action.target.kind === "thread") await requireConversation(checked.action.target.sessionId);
 
     const workflow = await createWorkflow({
       name: checked.name,

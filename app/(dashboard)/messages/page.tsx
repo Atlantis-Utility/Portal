@@ -18,8 +18,9 @@ import {
 import { MESSAGE_TAGS, knownTags } from "@/lib/message-tags";
 import Avatar from "@/components/messages/Avatar";
 import ScheduledMessages, { type SchedulePrefill } from "@/components/messages/ScheduledMessages";
+import AccessSection from "@/components/messages/AccessSection";
 import { SCHEDULE_OPTION } from "@/lib/workflows/types";
-import { CalendarClock } from "lucide-react";
+import { CalendarClock, Lock } from "lucide-react";
 import { setUnreadMessages } from "@/lib/unread-messages";
 
 interface InboxCache {
@@ -784,8 +785,11 @@ function NewMessage({
 
 function Details({
   conversation, annotation, contact, contacts, customer, customerId, displayName,
-  names, meExtension, onSave, onContactSaved,
+  names, meExtension, onSave, onContactSaved, canManageAccess = false, onAccessChanged,
 }: {
+  /** Administrators: show who can see this, and let them change it. */
+  canManageAccess?: boolean;
+  onAccessChanged?: () => void;
   /** The contact book, ten digits -> name, for naming a group's people. */
   contacts: Record<string, { name: string; company: string }>;
   conversation: SmsConversation;
@@ -923,6 +927,12 @@ function Details({
         )}
       </Section>
 
+      {canManageAccess && (
+        <Section title="Who can see this">
+          <AccessSection key={conversation.sessionId} sessionId={conversation.sessionId} onChanged={() => onAccessChanged?.()} />
+        </Section>
+      )}
+
       <Section title="Tags">
         <div className="flex flex-wrap gap-1.5">
           {MESSAGE_TAGS.map((t) => {
@@ -1035,6 +1045,10 @@ export default function MessagesPage() {
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [senders, setSenders] = useState<Array<{ number: string; user: string }>>(cached?.senders ?? []);
+  // Restricted conversations (only reported to administrators), for the lock
+  // in the list, and whether I can change who sees a conversation.
+  const [restricted, setRestricted] = useState<Set<string>>(() => new Set());
+  const [canManageAccess, setCanManageAccess] = useState(false);
   const [error, setError] = useState("");
 
   // Doesn't raise the spinner itself: the first load starts with state
@@ -1060,6 +1074,8 @@ export default function MessagesPage() {
       setNames(data.names ?? {});
       setContacts(data.contacts ?? {});
       setSenders(data.senders ?? []);
+      setRestricted(new Set<string>(data.restricted ?? []));
+      setCanManageAccess(Boolean(data.isAdmin));
       setState("ok");
       setUnreadMessages(data.unread ?? 0);
       writeInboxCache(data);
@@ -1429,8 +1445,11 @@ export default function MessagesPage() {
                     >
                       <Avatar name={name} />
                       <span className="min-w-0 flex-1">
-                        <span className={`block text-sm truncate ${c.unread ? "font-semibold text-[#0a0a0a]" : "text-[#444]"}`}>
-                          {name}
+                        <span className={`flex items-center gap-1 text-sm ${c.unread ? "font-semibold text-[#0a0a0a]" : "text-[#444]"}`}>
+                          <span className="truncate">{name}</span>
+                          {restricted.has(c.sessionId) && (
+                            <span data-tip="Only some people can see this" className="shrink-0 text-[#999]"><Lock className="w-3 h-3" /></span>
+                          )}
                         </span>
                         <span className="block text-xs text-[#999] truncate mt-0.5">
                           {c.theirTurn ? "" : "You: "}
@@ -1595,6 +1614,8 @@ export default function MessagesPage() {
                         annotation={annotations[current.sessionId]}
                         contact={current.isGroup ? undefined : contactFor(current.remote)}
                         contacts={contacts}
+                        canManageAccess={canManageAccess}
+                        onAccessChanged={() => load(true)}
                         customer={customerFor(current.remote)}
                         customerId={customerIdFor(current.remote)}
                         displayName={nameFor(current)}
@@ -1642,6 +1663,8 @@ export default function MessagesPage() {
                   annotation={annotations[current.sessionId]}
                   contact={current.isGroup ? undefined : contactFor(current.remote)}
                   contacts={contacts}
+                  canManageAccess={canManageAccess}
+                  onAccessChanged={() => load(true)}
                   customer={customerFor(current.remote)}
                   customerId={customerIdFor(current.remote)}
                   displayName={nameFor(current)}

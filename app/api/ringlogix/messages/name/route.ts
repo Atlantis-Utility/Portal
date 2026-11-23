@@ -1,5 +1,6 @@
 import { tenantDomain } from "@/lib/tenancy";
 import { NextRequest, NextResponse } from "next/server";
+import { requireConversation } from "@/lib/messages/access";
 import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
 import { getMessageSessions, setMessageSessionName, isConfigured } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest) {
     const name = (body.name ?? "").replace(/\s+/g, " ").trim();
 
     if (!sessionId) return NextResponse.json({ error: "Which conversation?" }, { status: 400 });
+    await requireConversation(sessionId);
     if (name.length > MAX_NAME) {
       return NextResponse.json(
         { error: `That's ${name.length} characters; keep it under ${MAX_NAME}.` },

@@ -1,6 +1,7 @@
 import { tenantDomain } from "@/lib/tenancy";
 import { NextRequest, NextResponse } from "next/server";
-import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
+import { requireConversation } from "@/lib/messages/access";
+import { ApiAuthError } from "@/lib/api-auth";
 import { getMessages, getSubscribers, isConfigured } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
 import {
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
   // Every message in a conversation. proxy.ts leaves /api/* to check for
   // itself, and this route didn't until now.
   try {
-    await requireEmployee();
+    await requireConversation(req.nextUrl.searchParams.get("session")?.trim() ?? "");
   } catch (err) {
     if (err instanceof ApiAuthError) return NextResponse.json({ error: err.message }, { status: err.status });
     throw err;

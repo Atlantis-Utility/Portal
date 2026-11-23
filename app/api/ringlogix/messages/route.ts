@@ -1,6 +1,7 @@
 import { tenantDomain } from "@/lib/tenancy";
 import { NextResponse } from "next/server";
-import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
+import { allows, currentViewer, loadRules } from "@/lib/messages/access";
+import { ApiAuthError } from "@/lib/api-auth";
 import { externalContactsByPhone } from "@/lib/integrations/store";
 import { getContacts, getMessageSessions, getSubscribers, isConfigured } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
@@ -73,7 +74,10 @@ export async function GET() {
   // slowest of them. Nothing is returned until the check has passed - the
   // mailbox itself is the whole shared inbox (proxy.ts leaves /api/* to
   // check for itself).
-  const auth = requireEmployee().then(() => null, (err: unknown) => err);
+  // Who's asking (and whether they're an administrator), and which
+  // conversations are restricted - both alongside everything else.
+  const viewing = currentViewer().then((viewer) => ({ viewer, denied: null as unknown }), (denied: unknown) => ({ viewer: null, denied }));
+  const restrictions = loadRules();
   const mailbox = (getMessageSessions(domain, "*") as Promise<RawMessageSession[] | null>).then(
     (rows) => ({ rows: rows ?? [], via: "wildcard" as const }),
     async () => ({ rows: await everyExtension(domain), via: "per-extension" as const }),
@@ -85,7 +89,7 @@ export async function GET() {
   // Missing tables before the integrations migration just mean nothing extra.
   const external = externalContactsByPhone().catch(() => ({} as Awaited<ReturnType<typeof externalContactsByPhone>>));
 
-  const denied = await auth;
+  const { viewer, denied } = await viewing;
   if (denied) {
     if (denied instanceof ApiAuthError) return NextResponse.json({ error: denied.message }, { status: denied.status });
     return ringlogixFailure(denied);
@@ -99,7 +103,11 @@ export async function GET() {
     const real: SmsConversation[] = rows
       .map(normalizeSession)
       .filter((c) => c.sessionId && (c.lastMessage || c.hasMedia));
-    const conversations = sortConversations(dedupeConversations(real));
+    const everything = sortConversations(dedupeConversations(real));
+    // Restricted conversations reach only the people they're shared with;
+    // administrators see all of them.
+    const rules = await restrictions;
+    const conversations = viewer ? everything.filter((c) => allows(rules.get(c.sessionId), viewer)) : [];
 
     // Contact books are per-extension with a shared flag: the shared one
     // (already on its way) plus the extensions that hold conversations,
@@ -133,7 +141,7 @@ export async function GET() {
     // from the mailbox rather than hardcoded, so a number added or taken
     // away in RingLogix is reflected here without a code change.
     const senders: Array<{ number: string; user: string }> = [];
-    for (const c of conversations) {
+    for (const c of everything) {
       if (!c.ourNumber || !c.user) continue;
       if (senders.some((x) => x.number === c.ourNumber)) continue;
       senders.push({ number: c.ourNumber, user: c.user });
@@ -147,6 +155,12 @@ export async function GET() {
       names: namesByExtension(subscribers ?? []),
       contacts,
       unread: conversations.filter((c) => c.unread).length,
+      // For administrators, which conversations are restricted (the list
+      // marks them). Nobody else needs to know a restriction exists.
+      restricted: viewer?.isAdmin
+        ? [...rules].filter(([, r]) => r.mode === "restricted").map(([id]) => id)
+        : [],
+      isAdmin: Boolean(viewer?.isAdmin),
     });
   } catch (err) {
     return ringlogixFailure(err);

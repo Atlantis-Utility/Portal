@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getErrorMessage } from "@/lib/utils";
+import { requireConversation } from "@/lib/messages/access";
 import { requirePageOption, ApiAuthError } from "@/lib/api-auth";
 import { deleteWorkflow, getWorkflow, listRuns, updateWorkflow } from "@/lib/workflows/store";
 import { checkScheduledSms } from "@/lib/workflows/validate";
@@ -88,6 +89,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       }
       const checked = checkScheduledSms(body, now);
       if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
+      if (checked.action.target.kind === "thread") await requireConversation(checked.action.target.sessionId);
       const workflow = await updateWorkflow(id, {
         name: checked.name,
         trigger: checked.trigger,

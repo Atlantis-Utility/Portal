@@ -6,7 +6,6 @@ import { X, Sun, Moon } from "lucide-react";
 import { NAV_PAGES } from "@/lib/nav-pages";
 import { areaFor } from "@/lib/areas";
 import { useTheme } from "@/lib/theme-context";
-import BrandMark from "@/components/ui/BrandMark";
 
 interface NavItem {
   label: string;
@@ -102,13 +101,11 @@ export default function Sidebar({
       <aside className="h-full w-full bg-surface border-r border-line flex flex-col overflow-hidden">
         {/* Brand */}
         <div className={`h-14 flex items-center shrink-0 ${collapsed ? "justify-center" : "px-4"}`}>
-          <Link href="/" className="flex items-center gap-2.5 min-w-0" onClick={onMobileClose} data-tip={collapsed ? "Atlantis Portal" : undefined}>
-            <BrandMark size={32} />
-            {!collapsed && (
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-fg leading-tight whitespace-nowrap">Atlantis Portal</span>
-                <span className="block text-[11px] text-fg-subtle leading-tight whitespace-nowrap">Atlantis Utility</span>
-              </span>
+          <Link href="/" onClick={onMobileClose} className="min-w-0" data-tip={collapsed ? "Atlantis Portal" : undefined}>
+            {collapsed ? (
+              <span className="text-sm font-semibold text-fg">AP</span>
+            ) : (
+              <span className="text-[15px] font-semibold tracking-tight text-fg whitespace-nowrap">Atlantis Portal</span>
             )}
           </Link>
           {!collapsed && (

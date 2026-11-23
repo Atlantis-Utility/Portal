@@ -249,20 +249,6 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
         </div>
       )}
 
-      {!live && workflows !== null && (
-        <div className="flex items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3">
-          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-tint-amber text-ink-amber shrink-0">
-            <FlaskConical className="w-4 h-4" />
-          </span>
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-fg">Test mode is on</p>
-            <p className="text-[13px] text-fg-muted mt-0.5">
-              Workflows run on schedule and record exactly who they would text, but nothing is sent. An administrator
-              switches sending on in the deployment&apos;s settings.
-            </p>
-          </div>
-        </div>
-      )}
 
       {error ? (
         <Panel>

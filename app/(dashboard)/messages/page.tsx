@@ -285,7 +285,12 @@ function Thread({
     }
   }
 
-  const them = partyName(conversation, names, customer);
+  // A saved contact names them - in the avatar, the reply box and every
+  // message - the same way the header and the details panel already do.
+  const savedName = !conversation.isGroup
+    ? contacts[(conversation.remoteNumbers[0] ?? conversation.remote ?? "").replace(/\D/g, "").slice(-10)]?.name
+    : undefined;
+  const them = savedName || partyName(conversation, names, customer);
 
   return (
     <div className="flex flex-col h-full min-h-0">

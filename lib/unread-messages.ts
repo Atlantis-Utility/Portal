@@ -29,7 +29,7 @@ export function useUnreadMessages(): number {
   return useSyncExternalStore(subscribe, () => count, () => 0);
 }
 
-const POLL_MS = 30_000;
+const POLL_MS = 15_000;
 
 /**
  * Keeps the count fresh: on mount, every half minute while the tab is

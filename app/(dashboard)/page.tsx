@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useUnreadMessages } from "@/lib/unread-messages";
 import Link from "next/link";
 import Header from "@/components/layout/Header";
 import TodaySchedule from "@/components/dashboard/TodaySchedule";
@@ -52,21 +53,15 @@ export default function DashboardPage() {
 
   const [cards, setCards] = useState<KanbanCard[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [unread, setUnread] = useState<number | null>(null);
 
   useEffect(() => subscribeTasks(setCards), []);
   useEffect(() => subscribeNotes(setNotes), []);
 
   // The one number worth putting on a dashboard for a shared inbox: how
   // many conversations are waiting on somebody here.
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/ringlogix/messages")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (alive) setUnread(typeof d?.unread === "number" ? d.unread : null); })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, []);
+  // Kept live by the shell (lib/unread-messages.ts), the same count as the
+  // badge on Messages - no need to fetch the whole inbox for one number.
+  const unread = useUnreadMessages();
 
   const me = (authUser?.displayName ?? "").trim().toLowerCase();
   const mine = useMemo(

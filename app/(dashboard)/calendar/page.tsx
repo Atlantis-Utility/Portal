@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePolling } from "@/lib/use-polling";
 import { useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/layout/Header";
 import TaskDetailDrawer from "@/components/tasks/TaskDetailDrawer";
@@ -146,6 +147,9 @@ export default function CalendarPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (outlookConnected) fetchOutlookEvents(cursorYear, cursorMonth);
   }, [outlookConnected, cursorYear, cursorMonth, fetchOutlookEvents]);
+
+  // Outlook can't tell us when a meeting changes, so it's asked every minute.
+  usePolling(() => { if (outlookConnected) fetchOutlookEvents(cursorYear, cursorMonth); }, 60_000, outlookConnected);
 
   const meetingsByDate = useMemo(() => {
     const map = new Map<string, KanbanCard[]>();

@@ -161,6 +161,16 @@ const RL_TTL = 3 * 60_000; // 3 minutes for read-only data
 const RL_MESSAGE_TTL = 5_000;
 const LIVE_OBJECTS = new Set(["messagesession", "message"]);
 
+/**
+ * Contacts sit in between: people save them from the inbox and expect the
+ * name to appear at once. Saving or deleting one clears this server's copy
+ * (see createContact), but a deployment runs several servers, each with its
+ * own cache, so the others catch up within this long rather than three
+ * minutes.
+ */
+const RL_CONTACT_TTL = 20_000;
+const CONTACT_OBJECTS = new Set(["contact"]);
+
 async function pbxApiRaw(
   object: string,
   action: string,
@@ -217,7 +227,7 @@ function pbxApi(
   if (!READ_ACTIONS.has(action)) return doFetch();
   // Stable cache key from sorted params
   const paramStr = Object.keys(params).sort().map((k) => `${k}=${params[k]}`).join("&");
-  const ttl = LIVE_OBJECTS.has(object) ? RL_MESSAGE_TTL : RL_TTL;
+  const ttl = LIVE_OBJECTS.has(object) ? RL_MESSAGE_TTL : CONTACT_OBJECTS.has(object) ? RL_CONTACT_TTL : RL_TTL;
   return withCache(`rl:${object}:${action}:${paramStr}`, ttl, doFetch);
 }
 
@@ -462,11 +472,16 @@ export async function createContact(domain: string, user: string, firstName: str
   if (opts?.cell_phone) params.cell_phone = opts.cell_phone;
   if (opts?.home_phone) params.home_phone = opts.home_phone;
   if (opts?.email)      params.email      = opts.email;
-  return pbxApi("contact", "create", params);
+  const created = await pbxApi("contact", "create", params);
+  // The next read must see it: the inbox names numbers from these books.
+  invalidate("rl:contact:");
+  return created;
 }
 
 export async function deleteContact(domain: string, user: string, firstName: string, lastName: string, contactId: string) {
-  return pbxApi("contact", "delete", { domain, user, first_name: firstName, last_name: lastName, contact_id: contactId });
+  const deleted = await pbxApi("contact", "delete", { domain, user, first_name: firstName, last_name: lastName, contact_id: contactId });
+  invalidate("rl:contact:");
+  return deleted;
 }
 
 // Departments

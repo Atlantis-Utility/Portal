@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePolling } from "@/lib/use-polling";
 import {
   Plug, RefreshCw, CheckCircle2, AlertCircle, Clock, Play, Pause, Trash2, Pencil, X, Copy,
   ChevronDown, ChevronRight, Send, Link2, KeyRound,
@@ -52,6 +53,8 @@ export default function IntegrationsPage() {
   }, [version]);
 
   const reload = () => setVersion((v) => v + 1);
+  // Syncs finish on the server's timer; show them without a reload.
+  usePolling(reload, 15_000);
 
   async function act(item: IntegrationView, what: string) {
     if (what === "delete") {

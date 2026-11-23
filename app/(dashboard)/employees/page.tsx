@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { usePolling } from "@/lib/use-polling";
 import { useRouter } from "next/navigation";
 import Header from "@/components/layout/Header";
 import ExportMenu from "@/components/ui/ExportMenu";
@@ -67,6 +68,8 @@ export default function EmployeesPage() {
     })();
     return () => { alive = false; };
   }, [loginsVersion]);
+  // Someone accepting their invite turns Pending into Active by itself.
+  usePolling(() => setLoginsVersion((v) => v + 1), 30_000);
 
   async function invite(emp: Employee) {
     setInviting(emp.id);

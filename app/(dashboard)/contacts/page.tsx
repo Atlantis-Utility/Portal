@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { usePolling } from "@/lib/use-polling";
 import { useConfirm } from "@/lib/confirm";
 import Overlay from "@/components/ui/Overlay";
 import Header from "@/components/layout/Header";
@@ -36,7 +37,7 @@ const EMPTY_FORM = {
 };
 
 export default function ContactsPage() {
-  const [state, setState] = useState<ViewState>("idle");
+  const [state, setState] = useState<ViewState>("loading");
   const confirm = useConfirm();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [error, setError] = useState("");
@@ -51,12 +52,17 @@ export default function ContactsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  // Which extension's book a new contact goes into, when none is filtered.
+  const [saveTo, setSaveTo] = useState("");
 
-  const load = useCallback(async () => {
-    if (!user) return;
-    setState("loading");
+  // "initial": the page opens already loading; "silent": a background
+  // refresh that keeps the list if it fails; "manual": the Load button.
+  const load = useCallback(async (mode: "initial" | "silent" | "manual" = "manual") => {
+    const silent = mode === "silent";
+    if (mode === "manual") setState("loading");
     try {
-      const res = await fetch(`/api/ringlogix/contacts?user=${encodeURIComponent(user)}`);
+      // An empty extension means every book.
+      const res = await fetch(`/api/ringlogix/contacts?user=${encodeURIComponent(user.trim() || "all")}`);
       if (res.status === 503) { setState("unconfigured"); return; }
       const data = await res.json();
       if (data?.error === "not_configured") { setState("unconfigured"); return; }
@@ -65,10 +71,21 @@ export default function ContactsPage() {
       setContacts(arr);
       setState("ok");
     } catch (e) {
+      // A background refresh that fails keeps the list on screen.
+      if (silent) return;
       setError(e instanceof Error ? e.message : "Failed to load");
       setState("error");
     }
   }, [user]);
+
+  // Live while a book is showing: saved or deleted contacts (here, in
+  // Messages, or in RingLogix itself) appear without pressing Load again.
+  // Every book is ~55 PBX reads, so 30s rather than as often as Messages.
+  usePolling(() => load("silent"), 30_000, state === "ok");
+  // "initial" sets state only after the fetch answers; the rule can't see
+  // past the useCallback to tell.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { load("initial"); }, [load]);
 
   const deleteContact = async (c: Contact) => {
     const ok = await confirm({
@@ -97,13 +114,18 @@ export default function ContactsPage() {
       setSaveError("First and last name are required.");
       return;
     }
+    const target = (user.trim() || saveTo.trim());
+    if (!target) {
+      setSaveError("Pick which extension's contact book it goes in.");
+      return;
+    }
     setSaving(true);
     setSaveError("");
     try {
       const res = await fetch("/api/ringlogix/contacts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, user }),
+        body: JSON.stringify({ ...form, user: target }),
       });
       if (!res.ok) {
         const d = await res.json();
@@ -166,18 +188,18 @@ export default function ContactsPage() {
       {/* Extension selector */}
       <div className="bg-white border border-[#eaeaea] rounded-xl p-4 mb-5 flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
-          <label className="text-[10px] font-semibold text-[#999] uppercase tracking-wider">User / Extension</label>
+          <label className="text-[10px] font-semibold text-[#999] uppercase tracking-wider">Extension</label>
           <input
             type="text"
-            placeholder="e.g. 1001"
+            placeholder="All extensions"
             value={user}
             onChange={(e) => setUser(e.target.value)}
             className="text-sm border border-[#eaeaea] rounded-lg px-3 py-1.5 outline-none focus:border-[#0070f3] transition-colors w-36"
           />
         </div>
         <button
-          onClick={load}
-          disabled={!user || state === "loading"}
+          onClick={() => load()}
+          disabled={state === "loading"}
           className="flex items-center gap-2 border border-[#eaeaea] bg-white text-sm font-medium text-[#0a0a0a] px-4 py-1.5 rounded-lg hover:bg-[#fafafa] transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${state === "loading" ? "animate-spin" : ""}`} />
@@ -269,7 +291,7 @@ export default function ContactsPage() {
             <AlertCircle className="w-6 h-6 text-[#f31260] mx-auto mb-3" />
             <p className="text-sm font-medium text-[#0a0a0a] mb-1">Failed to load</p>
             <p className="text-xs text-[#999] mb-4">{error}</p>
-            <button onClick={load} className="text-xs text-[#0070f3] hover:underline">Retry</button>
+            <button onClick={() => load()} className="text-xs text-[#0070f3] hover:underline">Retry</button>
           </div>
         )}
 
@@ -286,6 +308,7 @@ export default function ContactsPage() {
               <thead>
                 <tr className="border-b border-[#eaeaea] bg-[#fafafa]">
                   <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">Name</th>
+                  <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">Book</th>
                   <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">Company</th>
                   <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">Work Phone</th>
                   <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">Cell Phone</th>
@@ -306,6 +329,7 @@ export default function ContactsPage() {
                         <span className="text-sm font-medium text-[#0a0a0a]">{[c.first_name, c.last_name].filter(Boolean).join(" ") || "-"}</span>
                       </div>
                     </td>
+                    <td className="px-4 py-3 text-xs text-[#666] whitespace-nowrap">{!c.user || c.user === "*" ? "Shared" : `Ext ${c.user}`}</td>
                     <td className="px-4 py-3 text-sm text-[#666]">{c.company || "-"}</td>
                     <td className="px-4 py-3 text-sm text-[#666] font-mono">{c.work_phone ? formatPhone(c.work_phone) : "-"}</td>
                     <td className="px-4 py-3 text-sm text-[#666] font-mono">{c.cell_phone ? formatPhone(c.cell_phone) : "-"}</td>
@@ -346,6 +370,19 @@ export default function ContactsPage() {
               </button>
             </div>
             <div className="p-5 space-y-3">
+              {!user.trim() && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-semibold text-[#999] uppercase tracking-wider">Save to extension *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 100"
+                    value={saveTo}
+                    onChange={(e) => setSaveTo(e.target.value)}
+                    className="text-sm border border-[#eaeaea] rounded-lg px-3 py-1.5 outline-none focus:border-[#0070f3] transition-colors w-full"
+                  />
+                  <p className="text-[10px] text-[#999]">Whose contact book it goes in. Every extension&apos;s book shows here and names numbers in Messages.</p>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] font-semibold text-[#999] uppercase tracking-wider">First Name *</label>

@@ -1,6 +1,6 @@
 import { tenantDomain } from "@/lib/tenancy";
 import { NextRequest, NextResponse } from "next/server";
-import { getContacts, getSubscribers, createContact, deleteContact, isConfigured } from "@/lib/ringlogix";
+import { getContacts, getSubscribers, createContact, deleteContact, isConfigured, invalidateRinglogixCache } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
 import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
 
@@ -66,7 +66,40 @@ export async function POST(req: NextRequest) {
   try {
     await requireEmployee();
     const body = await req.json();
-    const data = await createContact(await tenantDomain(), body.user, body.first_name, body.last_name, {
+    const domain = await tenantDomain();
+    const user = String(body.user ?? "").trim();
+    if (!user) return NextResponse.json({ error: "Which extension's contact book should it go in?" }, { status: 400 });
+
+    // RingLogix matches contacts BY NAME on create: a second "John Smith"
+    // in a book overwrites the first one's details rather than adding an
+    // entry (verified 2026-11-23). So unless the caller has confirmed a
+    // replace, a same-name contact already in that book stops the save and
+    // is named, and the page asks. Read fresh: a cached book could miss one
+    // saved a moment ago.
+    if (body.replace !== true) {
+      invalidateRinglogixCache("rl:contact:");
+      const book = ((await getContacts(domain, user).catch(() => [])) ?? []) as Array<Record<string, unknown>>;
+      const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
+      const clash = book.find(
+        (c) => norm(c.first_name) === norm(body.first_name) && norm(c.last_name) === norm(body.last_name),
+      );
+      if (clash) {
+        return NextResponse.json(
+          {
+            error: "A contact with that name is already in this book.",
+            existing: {
+              name: `${String(clash.first_name ?? "")} ${String(clash.last_name ?? "")}`.trim(),
+              book: clash.shared ? "the shared, company-wide book" : `extension ${user}'s book`,
+              phone: String(clash.cell_phone || clash.work_phone || clash.home_phone || ""),
+              company: String(clash.company ?? ""),
+            },
+          },
+          { status: 409 },
+        );
+      }
+    }
+
+    const data = await createContact(domain, user, body.first_name, body.last_name, {
       company: body.company, work_phone: body.work_phone,
       cell_phone: body.cell_phone, home_phone: body.home_phone, email: body.email,
     });

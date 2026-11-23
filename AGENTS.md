@@ -34,7 +34,23 @@ with **Reseller** scope, plus a separate API application. Hard-won facts:
 - `from_uid` names the extension that sent a message. `direction` is
   empty on internal chats, so direction is derived from `from_uid`.
 - Timestamps are stored **UTC without a marker**.
-- Message reads are cached 5s, everything else 3 minutes.
+- Message reads are cached 5s, contacts 20s (and cleared on every contact
+  write), everything else 3 minutes.
+- **Contacts are per extension**, read with `user=<ext>`; `user=*` is the
+  shared (company-wide) book, and a shared contact also appears in every
+  extension's read with `"shared": true`. Contacts saved from Messages go
+  into the conversation's extension (often 100), so the Contacts tab reads
+  every book at once.
+- **`contact/create` matches BY NAME within a book**: a second "John Smith"
+  overwrites the first one's details instead of adding an entry (verified
+  2026-11-23). The contacts route refuses a same-name save with a 409 until
+  the caller confirms a replace (`lib/contact-save.ts`).
+- **Making a contact shared via the API is unsolved**: `shared=yes` on
+  create is accepted (200) but ignored, and the call updates the existing
+  same-name contact instead. Ask RingLogix for the parameter before
+  guessing further on the live PBX.
+- Group senders: an inbound message in a group carries the individual
+  sender in `from_num`.
 - Still refused: `domain/read`, `reseller/read`, media upload
   (`upload_id` — the shape is undocumented and `upload/create` returns
   nothing), and there is no webhook, so Messages polls.

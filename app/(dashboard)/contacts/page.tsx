@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { saveContact } from "@/lib/contact-save";
 import { usePolling } from "@/lib/use-polling";
 import { useConfirm } from "@/lib/confirm";
 import Overlay from "@/components/ui/Overlay";
@@ -122,14 +123,10 @@ export default function ContactsPage() {
     setSaving(true);
     setSaveError("");
     try {
-      const res = await fetch("/api/ringlogix/contacts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, user: target }),
-      });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error ?? "Failed to add contact");
+      const saved = await saveContact({ ...form, user: target }, confirm);
+      if (!saved.ok) {
+        if (saved.canceled) return;
+        throw new Error(saved.error ?? "Failed to add contact");
       }
       setShowModal(false);
       setForm(EMPTY_FORM);

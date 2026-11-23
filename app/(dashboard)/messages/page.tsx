@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { saveContact } from "@/lib/contact-save";
 import Select from "@/components/ui/Select";
 import {
   MessageSquare, RefreshCw, AlertCircle, BellOff,
@@ -454,6 +455,7 @@ function SaveContact({
   onSaved: () => void;
 }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
@@ -467,11 +469,8 @@ function SaveContact({
     }
     setSaving(true);
     try {
-      const res = await fetch("/api/ringlogix/contacts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          domain: conversation.domain,
+      const saved = await saveContact(
+        {
           // Saved on the extension that holds the conversation, which is
           // the one that will be looking at it again.
           user: conversation.user,
@@ -479,10 +478,14 @@ function SaveContact({
           last_name: last.trim(),
           company: company.trim(),
           cell_phone: conversation.remote,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message ?? data.error ?? "Couldn't save that contact");
+        },
+        confirm,
+      );
+      if (!saved.ok) {
+        if (saved.canceled) return;
+        throw new Error(saved.error ?? "Couldn't save that contact");
+      }
+      if (saved.replaced) toast.success("Contact replaced.");
       setOpen(false);
       setFirst(""); setLast("");
       onSaved();

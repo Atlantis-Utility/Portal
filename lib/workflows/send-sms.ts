@@ -12,16 +12,19 @@ import type { RunDetail, RunOutcome, SendSmsAction } from "./types";
 /**
  * Carries out a "send a text" action.
  *
- * Sending is OFF unless the deployment says otherwise:
- * SCHEDULED_SMS_MODE must be exactly "live". Anything else - unset, a
- * typo, "test" - is a rehearsal: every check below still runs (the
+ * Sending is ON unless the deployment switches it off with
+ * SCHEDULED_SMS_MODE=off. Switched off, every check below still runs (the
  * conversation exists, the number is ours, nobody has opted out, the cap
- * isn't reached) and the run records exactly what it would have sent, but
- * the PBX is never asked to send. The switch is read at the one place that
- * calls sendMessage, so no other path can send.
+ * isn't reached) and the run records who it would have texted, but the PBX
+ * is never asked to send. The switch is read at the one place that calls
+ * sendMessage, so no other path can send.
  */
 export function sendingIsLive(): boolean {
-  return process.env.SCHEDULED_SMS_MODE === "live";
+  // On unless a deployment switches it off. It used to be off unless set
+  // to "live", and a deployment that never got the setting (or wasn't
+  // redeployed after it) silently rehearsed every run instead of sending.
+  const mode = (process.env.SCHEDULED_SMS_MODE ?? "").trim().toLowerCase();
+  return mode !== "off" && mode !== "test";
 }
 
 /** CTIA's opt-out and opt-back-in words. Matched on the whole message. */
@@ -145,7 +148,7 @@ export async function executeSendSms(
       continue;
     }
     if (!opts.live) {
-      detail.push({ to: s.to, ok: true, skipped: "Test mode: checked, not sent." });
+      detail.push({ to: s.to, ok: true, skipped: "Checked, not sent (sending is switched off)." });
       continue;
     }
 
@@ -193,7 +196,7 @@ function summarise(detail: RunDetail[], sent: number, live: boolean): SendResult
 
   const parts: string[] = [];
   if (live) parts.push(`Sent ${sent} of ${total}`);
-  else parts.push(`Test mode: ${rehearsed} of ${total} would have been sent`);
+  else parts.push(`Sending is switched off: ${rehearsed} of ${total} checked, none sent`);
   if (skipped) parts.push(`${skipped} skipped`);
   if (errors) parts.push(`${errors} failed`);
   return { outcome, sentCount: sent, summary: parts.join(" · "), detail };

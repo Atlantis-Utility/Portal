@@ -60,7 +60,7 @@ const STATUS: Record<WorkflowStatus, { label: string; dot: string; text: string 
 
 const OUTCOME: Record<WorkflowRun["outcome"], { label: string; text: string; dot: string }> = {
   sent:    { label: "Sent",        text: "text-ink-green", dot: "bg-ink-green" },
-  dry_run: { label: "Test run",    text: "text-ink-amber", dot: "bg-ink-amber" },
+  dry_run: { label: "Not sent",    text: "text-ink-amber", dot: "bg-ink-amber" },
   partial: { label: "Partly sent", text: "text-ink-amber", dot: "bg-ink-amber" },
   failed:  { label: "Failed",      text: "text-ink-rose",  dot: "bg-ink-rose" },
   skipped: { label: "Skipped",     text: "text-fg-muted",  dot: "bg-fg-subtle" },

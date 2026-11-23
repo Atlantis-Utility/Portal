@@ -67,7 +67,7 @@ triggers and actions rather than tables. Code is in `lib/workflows/`.
 
 | Setting | What it does |
 |---|---|
-| `SCHEDULED_SMS_MODE` | Sending is **off** unless this is exactly `live`. Otherwise every run is a rehearsal: all checks run and the history shows who *would* have been texted, but nothing is sent. |
+| `SCHEDULED_SMS_MODE` | Sending is **on** unless this is `off`. When it is `off`, every run still checks everything and the history shows who *would* have been texted, but nothing is sent. |
 | `SCHEDULED_SMS_DAILY_CAP` | Most automated texts sent per day (Pacific), across all schedules. Default 200. |
 | `CRON_SECRET` | The timer's password for `/api/cron/workflows`. Unset, the route refuses everything. |
 

@@ -143,8 +143,10 @@ function partyName(
 // ── The conversation ────────────────────────────────────────────────────
 
 function Thread({
-  conversation, customer, names, meExtension, meName, onSent, onSchedule,
+  conversation, customer, names, contacts, meExtension, meName, onSent, onSchedule,
 }: {
+  /** The contact book, ten digits -> name, for naming who wrote in a group. */
+  contacts: Record<string, { name: string; company: string }>;
   /** Opens the scheduler aimed at this conversation. Absent without the grant. */
   onSchedule?: (draft: string) => void;
   conversation: SmsConversation;
@@ -313,7 +315,13 @@ function Thread({
           const isMe =
             (m.sentFromErp && meName && m.fromName === meName) ||
             Boolean(m.fromExtension && meExtension && m.fromExtension === meExtension);
-          const who = m.fromName ? (isMe ? `${m.fromName} (you)` : m.fromName) : them;
+          // In a group, an incoming text is from one of its people, and each
+          // message carries that person's number: name them by it (or by
+          // the contact saved for it) rather than by the group's own name.
+          const sender = !mine && !m.fromName && conversation.isGroup && m.from
+            ? contacts[m.from.slice(-10)]?.name || formatPhone(m.from) || m.from
+            : "";
+          const who = m.fromName ? (isMe ? `${m.fromName} (you)` : m.fromName) : sender || them;
           return (
             <div key={m.id} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
               {/* The circle sits on the bubble's bottom edge, the way a
@@ -324,6 +332,8 @@ function Thread({
                     thread; which side it sits on is what says whose it is. */}
                 <Avatar name={who} />
                 <div className="max-w-[min(34rem,calc(100%-2.5rem))] min-w-0">
+                {/* Several people write in a group, so say which one. */}
+                {sender && <p className="text-[11px] font-medium text-[#666] mb-1 ml-1">{sender}</p>}
                 <div
                   // Ours tinted, theirs neutral, both with the text dark
                   // enough to read for a long time. A solid accent bubble
@@ -1585,6 +1595,7 @@ export default function MessagesPage() {
                       conversation={current}
                       customer={customerFor(current.remote)}
                       names={names}
+                      contacts={contacts}
                       meExtension={meExtension}
                       meName={authUser?.displayName ?? ""}
                       onSent={() => load(true)}

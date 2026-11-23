@@ -104,10 +104,10 @@ export default function EmployeeProfilePage() {
   if (notFound) {
     return (
       <div className="flex flex-col items-center justify-center py-24">
-        <p className="text-lg font-semibold text-[#0a0a0a] mb-2">Employee not found</p>
+        <p className="text-lg font-semibold text-[#0a0a0a] mb-2">User not found</p>
         <Link href="/employees" className="flex items-center gap-2 text-sm text-[#0070f3] hover:underline">
           <ArrowLeft className="w-4 h-4" />
-          Back to Employees
+          Back to Users
         </Link>
       </div>
     );
@@ -132,7 +132,7 @@ export default function EmployeeProfilePage() {
         className="inline-flex items-center gap-2 text-sm text-[#666] hover:text-[#0a0a0a] mb-6 transition-colors"
       >
         <ArrowLeft className="w-4 h-4" />
-        Back to Employees
+        Back to Users
       </Link>
 
       {/* Profile Header */}

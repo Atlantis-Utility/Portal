@@ -73,7 +73,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
             <p className="text-base font-semibold text-[#0a0a0a] mb-1">You&apos;re signed in</p>
             <p className="text-sm text-[#666]">
               Nobody has given this account access to any pages yet. Ask an administrator to grant them on the
-              Employees page.
+              Users page.
             </p>
             <p className="text-[11px] text-[#bbb] mt-4">{authUser.email}</p>
             <button

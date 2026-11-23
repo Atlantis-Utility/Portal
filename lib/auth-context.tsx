@@ -150,7 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ) {
         console.warn("[auth] no employee record for", user.email);
         setAuthError(
-          "That account isn't set up for this workspace. Ask an administrator to add you on the Employees page.",
+          "That account isn't set up for this workspace. Ask an administrator to add you on the Users page.",
         );
         setAuthUser(null);
         setLoading(false);

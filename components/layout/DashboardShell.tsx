@@ -11,6 +11,7 @@ import { hasPageAccess, NAV_PAGES } from "@/lib/nav-pages";
 import { ACCENT, areaFor } from "@/lib/areas";
 import { useAuth } from "@/lib/auth-context";
 import { getInitials } from "@/lib/utils";
+import { useUnreadMessages, useUnreadPoller } from "@/lib/unread-messages";
 
 // Notifications live in localStorage and announce themselves with an
 // "app-notification" event, so the unread count is read as an external store.
@@ -49,6 +50,9 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   // nothing until the grants have resolved, rather than counting everything
   // for a moment.
   const access = authUser?.access;
+  // The badge on Messages: polled while signed in and allowed to see it.
+  useUnreadPoller(Boolean(authUser) && hasPageAccess("/messages", access));
+  const unreadMessages = useUnreadMessages();
   const signedIn = Boolean(authUser);
   const unreadCount = useSyncExternalStore(
     subscribeNotifications,
@@ -125,6 +129,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         userDisplayName={displayName}
         userInitials={initials}
         userSubtext={authUser?.employeeAccessRole || (authUser?.isAdmin ? "Administrator" : "Contributor")}
+        unreadMessages={unreadMessages}
       />
 
       <main
@@ -159,8 +164,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
                 className="flex items-center gap-2 rounded-lg hover:bg-surface-3 pl-1 pr-1.5 py-1 transition-colors"
                 aria-label="Your account"
               >
-                <span className="w-7 h-7 rounded-full bg-linear-to-br from-ink-indigo to-ink-violet flex items-center justify-center shrink-0">
-                  <span className="text-white text-[10px] font-semibold">{initials}</span>
+                <span className="w-7 h-7 rounded-full bg-fg flex items-center justify-center shrink-0">
+                  <span className="text-surface text-[10px] font-semibold">{initials}</span>
                 </span>
                 <ChevronDown className={`hidden sm:block w-3.5 h-3.5 text-fg-subtle transition-transform ${profileOpen ? "rotate-180" : ""}`} />
               </button>
@@ -168,8 +173,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
               {profileOpen && (
                 <div className="absolute right-0 top-full mt-2 w-60 bg-surface border border-line rounded-xl shadow-xl z-50 overflow-hidden">
                   <div className="px-4 py-3 border-b border-line flex items-center gap-3">
-                    <span className="w-9 h-9 rounded-full bg-linear-to-br from-ink-indigo to-ink-violet flex items-center justify-center shrink-0">
-                      <span className="text-white text-xs font-semibold">{initials}</span>
+                    <span className="w-9 h-9 rounded-full bg-fg flex items-center justify-center shrink-0">
+                      <span className="text-surface text-xs font-semibold">{initials}</span>
                     </span>
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold text-fg truncate">{displayName}</span>

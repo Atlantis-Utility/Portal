@@ -62,7 +62,7 @@ export default function EmployeesPage() {
 
   const exportData = () => ({
     filename: "employees",
-    title: "Employees",
+    title: "Users",
     headers: ["Name", "Email", "Role", "Access", "Status", "Location", "Start Date"],
     rows: filtered.map((emp) => [
       emp.name, emp.email ?? "", emp.role ?? "", emp.accessRole ?? "", emp.status ?? "",
@@ -83,7 +83,7 @@ export default function EmployeesPage() {
   return (
     <div>
       <Header
-        title="Employees"
+        title="Users"
         subtitle={`${employees.length} team members`}
         actions={
           <>
@@ -93,7 +93,7 @@ export default function EmployeesPage() {
               className="flex items-center gap-2 bg-[#0a0a0a] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#333] transition-colors"
             >
               <Plus className="w-4 h-4" />
-              Add Employee
+              Add User
             </button>
           </>
         }
@@ -130,7 +130,7 @@ export default function EmployeesPage() {
           <thead>
             <tr className="border-b border-[#eaeaea] bg-[#fafafa]">
               <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">
-                Employee
+                User
               </th>
               <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">
                 Role

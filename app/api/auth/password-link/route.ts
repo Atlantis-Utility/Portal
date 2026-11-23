@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     const employee = await employeeFor(email);
     if (kind === "invite" && !employee) {
       return NextResponse.json(
-        { error: "That address isn't on any employee record. Add the employee first, then send the invite." },
+        { error: "That address isn't on the Users page. Add them there first, then send the invite." },
         { status: 400 },
       );
     }

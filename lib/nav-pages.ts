@@ -29,7 +29,7 @@ export const NAV_PAGES: NavPage[] = [
   { href: "/workflows",  label: "Workflows", section: "Workspace" },
 
   { href: "/contacts",   label: "Contacts",  section: "People"    },
-  { href: "/employees",  label: "Employees", section: "People"    },
+  { href: "/employees",  label: "Users", section: "People"    },
 
   { href: "/calendar",   label: "Calendar",  section: "Work"      },
   { href: "/tasks",      label: "Tasks",     section: "Work"      },

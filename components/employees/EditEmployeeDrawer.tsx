@@ -196,7 +196,7 @@ export default function EditEmployeeDrawer({ open, onClose, employee }: Props) {
     try {
       logActivity({
         category: "employees",
-        action: "Employee updated",
+        action: "User updated",
         detail: `Updated profile for ${patch.name ?? employee.name}`,
         metadata: { employeeId: employee.id },
       });
@@ -213,7 +213,7 @@ export default function EditEmployeeDrawer({ open, onClose, employee }: Props) {
       await removeEmployee(employee.id);
       logActivity({
         category: "employees",
-        action: "Employee removed",
+        action: "User removed",
         detail: `Removed ${employee.name} (${employee.role})`,
         metadata: { employeeId: employee.id },
       });
@@ -560,7 +560,7 @@ export default function EditEmployeeDrawer({ open, onClose, employee }: Props) {
             onClick={() => setConfirmDelete(true)}
             className="flex items-center gap-2 text-sm font-medium text-[#dc2626] border border-[#fecaca] px-4 py-2 rounded-lg hover:bg-[#fff5f5] transition-colors"
           >
-            Delete Employee
+            Delete User
           </button>
         </div>
 

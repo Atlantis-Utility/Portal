@@ -58,83 +58,75 @@ async function everyExtension(domain: string): Promise<RawMessageSession[]> {
 }
 
 export async function GET() {
-  // The whole shared mailbox: every number, every conversation. This route
-  // answered anyone who asked until the check below was added, because
-  // proxy.ts deliberately leaves /api/* to check for itself.
-  try {
-    await requireEmployee();
-  } catch (err) {
-    if (err instanceof ApiAuthError) return NextResponse.json({ error: err.message }, { status: err.status });
-    throw err;
-  }
-
   if (!isConfigured()) {
     return NextResponse.json({ error: "not_configured" }, { status: 503 });
   }
-
   const domain = await tenantDomain();
   if (!domain) {
     return NextResponse.json({ error: "No domain to read messages for" }, { status: 400 });
   }
 
+  // Everything that doesn't depend on anything else starts at once: the
+  // caller's check, the mailbox, the colleague list, the shared contact
+  // book and what connected systems know. Run one after another these
+  // added up to about two seconds on a cold start; together they cost the
+  // slowest of them. Nothing is returned until the check has passed - the
+  // mailbox itself is the whole shared inbox (proxy.ts leaves /api/* to
+  // check for itself).
+  const auth = requireEmployee().then(() => null, (err: unknown) => err);
+  const mailbox = (getMessageSessions(domain, "*") as Promise<RawMessageSession[] | null>).then(
+    (rows) => ({ rows: rows ?? [], via: "wildcard" as const }),
+    async () => ({ rows: await everyExtension(domain), via: "per-extension" as const }),
+  );
+  const colleagues = (getSubscribers(domain) as Promise<Array<Record<string, string>>>).catch(() => []);
+  const book = (d: string, u: string) =>
+    (getContacts(d, u) as Promise<Array<Record<string, string>>>).catch(() => []);
+  const sharedBook = book(domain, "*");
+  // Missing tables before the integrations migration just mean nothing extra.
+  const external = externalContactsByPhone().catch(() => ({} as Awaited<ReturnType<typeof externalContactsByPhone>>));
+
+  const denied = await auth;
+  if (denied) {
+    if (denied instanceof ApiAuthError) return NextResponse.json({ error: denied.message }, { status: denied.status });
+    return ringlogixFailure(denied);
+  }
+
   try {
-    let rows: RawMessageSession[];
-    let via: "wildcard" | "per-extension" = "wildcard";
-    try {
-      rows = ((await getMessageSessions(domain, "*")) ?? []) as RawMessageSession[];
-    } catch {
-      via = "per-extension";
-      rows = await everyExtension(domain);
-    }
+    const { rows, via } = await mailbox;
 
     // A conversation with no last message is an empty shell the PBX keeps
     // after a thread is cleared; it has nothing to show.
     const real: SmsConversation[] = rows
       .map(normalizeSession)
       .filter((c) => c.sessionId && (c.lastMessage || c.hasMedia));
-
     const conversations = sortConversations(dedupeConversations(real));
-    // Colleagues text each other too, and those conversations carry an
-    // extension where a customer's would carry a phone number. Sent along
-    // so the list can say "Cyril Obishai" rather than "104".
-    const subscribers = (await getSubscribers(domain).catch(() => [])) as Array<Record<string, string>>;
 
-    // The contact book, so a number somebody has named reads as that name
-    // rather than as digits. Contacts are per-extension with a shared
-    // flag, so this asks the extensions that actually hold conversations
-    // plus "*" for the shared ones - six calls, each cached.
+    // Contact books are per-extension with a shared flag: the shared one
+    // (already on its way) plus the extensions that hold conversations,
+    // which are only known now. Each is cached.
     const owners = [...new Set(conversations.map((c) => c.user).filter(Boolean))];
-    const books = await Promise.all(
-      ["*", ...owners].map((u) =>
-        (getContacts(domain, u) as Promise<Array<Record<string, string>>>).catch(() => []),
-      ),
-    );
+    const [subscribers, ...books] = await Promise.all([colleagues, sharedBook, ...owners.map((u) => book(domain, u))]);
+
     const contacts: Record<string, { name: string; company: string }> = {};
-    for (const book of books) {
-      for (const entry of book ?? []) {
-        const name = `${entry.first_name ?? ""} ${entry.last_name ?? ""}`.replace(/\s+/g, " ").trim();
+    for (const entries of books) {
+      for (const entry of entries ?? []) {
+        const name = `${entry.first_name ?? ""} ${entry.last_name ?? ""}`.replace(/s+/g, " ").trim();
         if (!name) continue;
         for (const field of ["cell_phone", "work_phone", "home_phone"]) {
-          const digits = (entry[field] ?? "").replace(/\D/g, "").slice(-10);
           // Last ten digits, so "805-816-8896" and "18058168896" are one
           // number rather than two.
+          const digits = (entry[field] ?? "").replace(/D/g, "").slice(-10);
           if (digits.length === 10 && !contacts[digits]) {
             contacts[digits] = { name, company: (entry.company ?? "").trim() };
           }
         }
       }
     }
-
     // Then whatever connected systems know (HubSpot, a sheet, a webhook).
     // The phone system's own book wins where both name a number: it is the
-    // one Teams shows too. Missing tables before the migration just mean
-    // nothing extra.
-    try {
-      for (const [digits, who] of Object.entries(await externalContactsByPhone())) {
-        if (!contacts[digits]) contacts[digits] = { name: who.name, company: who.company };
-      }
-    } catch {
-      // No integrations yet.
+    // one Teams shows too.
+    for (const [digits, who] of Object.entries(await external)) {
+      if (!contacts[digits]) contacts[digits] = { name: who.name, company: who.company };
     }
 
     // Which of our numbers can send, and from which extension. Derived

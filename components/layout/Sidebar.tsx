@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronLeft, ChevronRight, X, Sun, Moon } from "lucide-react";
 import { NAV_PAGES } from "@/lib/nav-pages";
-import { ACCENT, areaFor } from "@/lib/areas";
+import { areaFor } from "@/lib/areas";
 import { useTheme } from "@/lib/theme-context";
 import BrandMark from "@/components/ui/BrandMark";
 
@@ -22,6 +22,8 @@ interface SidebarProps {
   userDisplayName?: string;
   userInitials?: string;
   userSubtext?: string;
+  /** Unread texts, shown on Messages. */
+  unreadMessages?: number;
 }
 
 // Built from NAV_PAGES rather than kept as its own list, so a page can't be
@@ -45,39 +47,34 @@ function RailTip({ children }: { children: React.ReactNode }) {
 }
 
 function NavLink({
-  href, label, active, collapsed, onClick,
-}: { href: string; label: string; active: boolean; collapsed: boolean; onClick?: () => void }) {
-  const area = areaFor(href);
-  const accent = ACCENT[area.accent];
-  const Icon = area.icon;
+  href, label, active, collapsed, onClick, badge = 0,
+}: { href: string; label: string; active: boolean; collapsed: boolean; onClick?: () => void; badge?: number }) {
+  const Icon = areaFor(href).icon;
   return (
     <Link
       href={href}
       onClick={onClick}
       aria-current={active ? "page" : undefined}
       className={`group relative flex items-center rounded-lg transition-colors ${
-        collapsed ? "w-10 h-10 mx-auto justify-center" : "gap-2.5 px-2 py-1.5 w-full"
+        collapsed ? "w-10 h-10 mx-auto justify-center" : "gap-2.5 px-2.5 py-2 w-full"
       } ${active ? "bg-surface-3 text-fg" : "text-fg-muted hover:bg-surface-2 hover:text-fg"}`}
     >
-      {/* The accent bar marks where you are. */}
-      {active && !collapsed && <span className={`absolute -left-2 top-1.5 bottom-1.5 w-0.75 rounded-r ${accent.bar}`} />}
-      <span
-        className={`flex items-center justify-center w-7 h-7 rounded-md shrink-0 transition-colors ${
-          active ? accent.tile : `text-fg-subtle ${accent.hoverInk}`
-        }`}
-      >
-        <Icon className="w-4 h-4" />
-      </span>
+      <Icon className={`w-4 h-4 shrink-0 ${active ? "text-fg" : "text-fg-subtle group-hover:text-fg"}`} />
       {!collapsed && <span className="text-[13px] font-medium leading-none whitespace-nowrap flex-1">{label}</span>}
-      {collapsed && <RailTip>{label}</RailTip>}
-      {collapsed && active && <span className={`absolute -right-0.5 top-1/2 -translate-y-1/2 w-1 h-4 rounded-full ${accent.bar}`} />}
+      {!collapsed && badge > 0 && (
+        <span className="min-w-5 h-5 px-1.5 rounded-full bg-fg text-surface text-[10px] font-semibold flex items-center justify-center tabular-nums">
+          {badge > 99 ? "99+" : badge}
+        </span>
+      )}
+      {collapsed && badge > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-fg ring-2 ring-surface" />}
+      {collapsed && <RailTip>{badge > 0 ? `${label} · ${badge} unread` : label}</RailTip>}
     </Link>
   );
 }
 
 export default function Sidebar({
   collapsed, onToggle, mobileOpen = false, onMobileClose, allowedHrefs,
-  userDisplayName = "", userInitials = "", userSubtext = "",
+  userDisplayName = "", userInitials = "", userSubtext = "", unreadMessages = 0,
 }: SidebarProps) {
   const pathname = usePathname();
   const { isDark, toggleTheme } = useTheme();
@@ -155,6 +152,7 @@ export default function Sidebar({
                       active={isActive(item.href)}
                       collapsed={collapsed}
                       onClick={onMobileClose}
+                      badge={item.href === "/messages" ? unreadMessages : 0}
                     />
                   </li>
                 ))}
@@ -169,10 +167,10 @@ export default function Sidebar({
           <button
             onClick={toggleTheme}
             className={`group relative flex items-center rounded-lg transition-colors text-fg-muted hover:bg-surface-2 hover:text-fg ${
-              collapsed ? "w-10 h-10 mx-auto justify-center" : "gap-2.5 px-2 py-1.5 w-full"
+              collapsed ? "w-10 h-10 mx-auto justify-center" : "gap-2.5 px-2.5 py-2 w-full"
             }`}
           >
-            <span className="flex items-center justify-center w-7 h-7 rounded-md text-fg-subtle group-hover:text-ink-amber">
+            <span className="flex items-center justify-center text-fg-subtle group-hover:text-fg">
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </span>
             {!collapsed && <span className="text-[13px] font-medium">{isDark ? "Light mode" : "Dark mode"}</span>}
@@ -186,8 +184,8 @@ export default function Sidebar({
               collapsed ? "w-10 h-10 mx-auto justify-center" : "gap-2.5 p-2 w-full border border-line bg-surface-2"
             }`}
           >
-            <span className="w-8 h-8 rounded-full bg-linear-to-br from-ink-indigo to-ink-violet flex items-center justify-center shrink-0 ring-2 ring-surface">
-              <span className="text-[11px] font-semibold text-white">{userInitials || "?"}</span>
+            <span className="w-8 h-8 rounded-full bg-fg flex items-center justify-center shrink-0">
+              <span className="text-[11px] font-semibold text-surface">{userInitials || "?"}</span>
             </span>
             {!collapsed && (
               <span className="min-w-0 flex-1">

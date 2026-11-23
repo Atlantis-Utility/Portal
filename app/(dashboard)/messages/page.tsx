@@ -18,6 +18,36 @@ import Avatar from "@/components/messages/Avatar";
 import ScheduledMessages, { type SchedulePrefill } from "@/components/messages/ScheduledMessages";
 import { SCHEDULE_OPTION } from "@/lib/workflows/types";
 import { CalendarClock } from "lucide-react";
+import { setUnreadMessages } from "@/lib/unread-messages";
+
+interface InboxCache {
+  conversations: SmsConversation[];
+  names: Record<string, string>;
+  contacts: Record<string, { name: string; company: string }>;
+  senders: Array<{ number: string; user: string }>;
+}
+const INBOX_CACHE = "sc:inbox-v1";
+
+function readInboxCache(): InboxCache | null {
+  try {
+    const raw = sessionStorage.getItem(INBOX_CACHE);
+    const data = raw ? (JSON.parse(raw) as InboxCache) : null;
+    return data && Array.isArray(data.conversations) ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeInboxCache(data: Partial<InboxCache>) {
+  try {
+    sessionStorage.setItem(INBOX_CACHE, JSON.stringify({
+      conversations: data.conversations ?? [], names: data.names ?? {},
+      contacts: data.contacts ?? {}, senders: data.senders ?? [],
+    }));
+  } catch {
+    // Full or blocked storage only costs the instant paint next time.
+  }
+}
 import type { SmsConversation, SmsMessage } from "@/lib/ringlogix-messages";
 
 type ViewState = "loading" | "unconfigured" | "denied" | "error" | "ok";
@@ -951,10 +981,16 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 export default function MessagesPage() {
   const { authUser } = useAuth();
   const toast = useToast();
-  const [state, setState] = useState<ViewState>("loading");
-  const [conversations, setConversations] = useState<SmsConversation[]>([]);
-  const [names, setNames] = useState<Record<string, string>>({});
-  const [contacts, setContacts] = useState<Record<string, { name: string; company: string }>>({});
+  // The last list this tab loaded, so coming back to Messages paints at
+  // once and refreshes behind it instead of showing a spinner. Session
+  // storage, not local: it holds customers' numbers and message previews,
+  // and goes when the browser closes. AuthGuard means this never renders
+  // on the server, so reading it during the first render is safe.
+  const [cached] = useState(readInboxCache);
+  const [state, setState] = useState<ViewState>(cached ? "ok" : "loading");
+  const [conversations, setConversations] = useState<SmsConversation[]>(cached?.conversations ?? []);
+  const [names, setNames] = useState<Record<string, string>>(cached?.names ?? {});
+  const [contacts, setContacts] = useState<Record<string, { name: string; company: string }>>(cached?.contacts ?? {});
   const [annotations, setAnnotations] = useState<Record<string, ThreadAnnotation>>({});
   const [selected, setSelected] = useState("");
   const [search, setSearch] = useState("");
@@ -973,12 +1009,15 @@ export default function MessagesPage() {
   const [composing, setComposing] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState("");
-  const [senders, setSenders] = useState<Array<{ number: string; user: string }>>([]);
+  const [senders, setSenders] = useState<Array<{ number: string; user: string }>>(cached?.senders ?? []);
   const [error, setError] = useState("");
 
   // Doesn't raise the spinner itself: the first load starts with state
   // already "loading", and the Refresh and Retry buttons go through
   // reload(), which raises it before asking.
+  // With a cached list showing, a failed first refresh keeps it rather than
+  // replacing it with an error.
+  const startedFromCache = useRef(cached !== null);
   const load = useCallback(async (silent = false) => {
     try {
       const res = await fetch("/api/ringlogix/messages");
@@ -997,6 +1036,8 @@ export default function MessagesPage() {
       setContacts(data.contacts ?? {});
       setSenders(data.senders ?? []);
       setState("ok");
+      setUnreadMessages(data.unread ?? 0);
+      writeInboxCache(data);
     } catch (e) {
       if (silent) return;
       setError(e instanceof Error ? e.message : "Failed to load");
@@ -1004,10 +1045,7 @@ export default function MessagesPage() {
     }
   }, []);
 
-  // load() sets state only after its fetch resolves; the rule can't see
-  // past the useCallback to tell.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(startedFromCache.current); }, [load]);
 
   const reload = () => {
     setState("loading");

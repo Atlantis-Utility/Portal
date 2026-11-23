@@ -22,7 +22,7 @@ import { useAuth } from "@/lib/auth-context";
 
 // What a failed callback can send back, in words rather than codes.
 const CALLBACK_ERRORS: Record<string, string> = {
-  not_an_employee: "That account isn't on the employee list. Ask an administrator to add you first.",
+  not_an_employee: "That account isn't on the user list. Ask an administrator to add you first.",
 };
 
 export default function LoginForm() {

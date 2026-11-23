@@ -99,7 +99,7 @@ export default function AddEmployeeDrawer({ open, onClose }: Props) {
       });
       logActivity({
         category: "employees",
-        action: "Employee added",
+        action: "User added",
         detail: `Added ${newEmp.name} as ${newEmp.role} in ${newEmp.location}`,
         metadata: { employeeId: newEmp.id, role: newEmp.role, status: newEmp.status },
       });
@@ -125,7 +125,7 @@ export default function AddEmployeeDrawer({ open, onClose }: Props) {
     <Drawer
       open={open}
       onClose={handleClose}
-      title="Add Employee"
+      title="Add User"
       subtitle="Fill in the details to add a new team member"
       footer={
         <>
@@ -140,7 +140,7 @@ export default function AddEmployeeDrawer({ open, onClose }: Props) {
             disabled={saving}
             className="bg-[#0a0a0a] text-white text-sm font-medium px-5 py-2 rounded-lg hover:bg-[#333] transition-colors disabled:opacity-50"
           >
-            {saving ? "Saving..." : "Add Employee"}
+            {saving ? "Saving..." : "Add User"}
           </button>
         </>
       }

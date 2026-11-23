@@ -21,7 +21,7 @@ const CATEGORY_CONFIG: Record<LogCategory, {
   icon: React.ElementType;
 }> = {
   auth:      { label: "Auth",      bg: "bg-[#f5f5f5]",   text: "text-[#444]",    border: "border-[#e5e5e5]",   icon: LogIn      },
-  employees: { label: "Employees", bg: "bg-[#fafafa]",   text: "text-[#0a0a0a]", border: "border-[#eaeaea]",   icon: Users      },
+  employees: { label: "Users", bg: "bg-[#fafafa]",   text: "text-[#0a0a0a]", border: "border-[#eaeaea]",   icon: Users      },
   projects:  { label: "Projects",  bg: "bg-[#f0f4ff]",   text: "text-[#3b5bdb]", border: "border-[#c5d2f6]",   icon: FolderKanban },
   settings:  { label: "Settings",  bg: "bg-[#f5f5f5]",   text: "text-[#666]",    border: "border-[#e0e0e0]",   icon: Settings   },
   access:    { label: "Access",    bg: "bg-[#fffbeb]",   text: "text-[#b45309]", border: "border-[#fde68a]",   icon: Shield     },
@@ -324,7 +324,7 @@ export default function LogsPage() {
             </p>
             <p className="text-xs text-[#bbb] mt-1">
               {logs.length === 0
-                ? "Actions like adding employees, editing projects, and changing settings will appear here"
+                ? "Actions like adding users, editing projects, and changing settings will appear here"
                 : "Try adjusting the search or category filter"}
             </p>
           </div>

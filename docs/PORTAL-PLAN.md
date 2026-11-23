@@ -65,7 +65,7 @@ Workflows and integrations per account; inbound triggers and templates
 
 ## Status
 
-- [~] Phase 0: routes done; run migration-staff-only.sql
+- [x] Phase 0: routes take the domain from the server; staff-only RLS applied and verified with a non-employee login (2026-11-23)
 - [ ] Phase 1
 - [ ] Phase 2
 - [ ] Phase 3

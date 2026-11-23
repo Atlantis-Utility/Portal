@@ -778,9 +778,11 @@ function NewMessage({
 // ── Notes and tags: the part RingLogix has nowhere to put ───────────────
 
 function Details({
-  conversation, annotation, contact, customer, customerId, displayName,
+  conversation, annotation, contact, contacts, customer, customerId, displayName,
   names, meExtension, onSave, onContactSaved,
 }: {
+  /** The contact book, ten digits -> name, for naming a group's people. */
+  contacts: Record<string, { name: string; company: string }>;
   conversation: SmsConversation;
   annotation: ThreadAnnotation | undefined;
   contact: { name: string; company: string } | undefined;
@@ -863,11 +865,17 @@ function Details({
         {conversation.isGroup && conversation.remoteNumbers.length > 1 ? (
           <Row label="People">
             <span className="flex flex-col items-end gap-0.5">
-              {conversation.remoteNumbers.map((n) => (
-                <a key={n} href={`tel:+${n}`} className="text-[#0070f3] hover:underline tabular-nums">
-                  {formatPhone(n) || n}
-                </a>
-              ))}
+              {conversation.remoteNumbers.map((n) => {
+                // A member saved as a contact reads as their name, with
+                // the number under it.
+                const who = contacts[n.slice(-10)]?.name;
+                return (
+                  <a key={n} href={`tel:+${n}`} className="flex flex-col items-end text-right hover:underline">
+                    {who && <span className="text-[#0a0a0a] font-medium">{who}</span>}
+                    <span className={`tabular-nums ${who ? "text-[11px] text-[#999]" : "text-[#0070f3]"}`}>{formatPhone(n) || n}</span>
+                  </a>
+                );
+              })}
             </span>
           </Row>
         ) : conversation.remote ? (
@@ -1580,7 +1588,8 @@ export default function MessagesPage() {
                         key={`m-${current.sessionId}`}
                         conversation={current}
                         annotation={annotations[current.sessionId]}
-                        contact={contactFor(current.remote)}
+                        contact={current.isGroup ? undefined : contactFor(current.remote)}
+                        contacts={contacts}
                         customer={customerFor(current.remote)}
                         customerId={customerIdFor(current.remote)}
                         displayName={nameFor(current)}
@@ -1626,7 +1635,8 @@ export default function MessagesPage() {
                   key={current.sessionId}
                   conversation={current}
                   annotation={annotations[current.sessionId]}
-                  contact={contactFor(current.remote)}
+                  contact={current.isGroup ? undefined : contactFor(current.remote)}
+                  contacts={contacts}
                   customer={customerFor(current.remote)}
                   customerId={customerIdFor(current.remote)}
                   displayName={nameFor(current)}

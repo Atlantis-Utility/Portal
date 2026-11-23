@@ -1,6 +1,7 @@
+import { tenantDomain } from "@/lib/tenancy";
 import { NextRequest, NextResponse } from "next/server";
 import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
-import { getMessageSessions, sendMessage, isConfigured, ourDomain } from "@/lib/ringlogix";
+import { getMessageSessions, sendMessage, isConfigured } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
 import { digitsOf, extensionOf, remoteNumbersOf, type RawMessageSession } from "@/lib/ringlogix-messages";
 import { recordSender } from "@/lib/messages/senders";
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
     const text = (body.text ?? "").trim();
     const sessionId = (body.sessionId ?? "").trim();
     const user = (body.user ?? "").trim();
-    const domain = (body.domain ?? "").trim() || ourDomain();
+    const domain = await tenantDomain();
 
     if (!text) return NextResponse.json({ error: "Nothing to send" }, { status: 400 });
     if (text.length > MAX_LENGTH) {

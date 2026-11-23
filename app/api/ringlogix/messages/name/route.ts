@@ -1,6 +1,7 @@
+import { tenantDomain } from "@/lib/tenancy";
 import { NextRequest, NextResponse } from "next/server";
 import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
-import { getMessageSessions, setMessageSessionName, isConfigured, ourDomain } from "@/lib/ringlogix";
+import { getMessageSessions, setMessageSessionName, isConfigured } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
 import type { RawMessageSession } from "@/lib/ringlogix-messages";
 
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
     };
 
     const sessionId = (body.sessionId ?? "").trim();
-    const domain = (body.domain ?? "").trim() || ourDomain();
+    const domain = await tenantDomain();
     // Collapsed, because a name with a newline in it breaks every list
     // it appears in and nobody meant to type one.
     const name = (body.name ?? "").replace(/\s+/g, " ").trim();

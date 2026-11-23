@@ -1,6 +1,7 @@
+import { tenantDomain } from "@/lib/tenancy";
 import { NextRequest, NextResponse } from "next/server";
 import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
-import { getMessages, isConfigured, ourDomain, ringlogixAuthHeader } from "@/lib/ringlogix";
+import { getMessages, isConfigured, ringlogixAuthHeader } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
 import type { RawMessage } from "@/lib/ringlogix-messages";
 
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
     if (!isConfigured()) return NextResponse.json({ error: "RingLogix isn't configured" }, { status: 503 });
 
     const { searchParams } = req.nextUrl;
-    const domain = searchParams.get("domain")?.trim() || ourDomain();
+    const domain = await tenantDomain();
     const user = (searchParams.get("user") ?? "").trim();
     const session = (searchParams.get("session") ?? "").trim();
     const id = (searchParams.get("id") ?? "").trim();

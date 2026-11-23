@@ -1,6 +1,7 @@
+import { tenantDomain } from "@/lib/tenancy";
 import { NextRequest, NextResponse } from "next/server";
 import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
-import { getMessageSessions, setMessageSessionStatus, isConfigured, ourDomain } from "@/lib/ringlogix";
+import { getMessageSessions, setMessageSessionStatus, isConfigured } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
 import type { RawMessageSession } from "@/lib/ringlogix-messages";
 
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
       read?: boolean;
     };
     const sessionId = (body.sessionId ?? "").trim();
-    const domain = (body.domain ?? "").trim() || ourDomain();
+    const domain = await tenantDomain();
     const read = Boolean(body.read);
     if (!sessionId) return NextResponse.json({ error: "Which conversation?" }, { status: 400 });
 

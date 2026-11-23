@@ -1,6 +1,7 @@
+import { tenantDomain } from "@/lib/tenancy";
 import { NextRequest, NextResponse } from "next/server";
 import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
-import { getMessages, getSubscribers, isConfigured, ourDomain } from "@/lib/ringlogix";
+import { getMessages, getSubscribers, isConfigured } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
 import {
   normalizeMessage, sortMessages, namesByExtension, type RawMessage,
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = req.nextUrl;
-  const domain = searchParams.get("domain")?.trim() || ourDomain();
+  const domain = await tenantDomain();
   // Deliberately not rejected when empty: two of our conversations belong
   // to no extension at all, and the API reads those with an empty user.
   // What it will not take here is the "*" the session list accepts.

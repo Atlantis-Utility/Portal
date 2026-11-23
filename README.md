@@ -33,6 +33,7 @@ projects, inventory, vault and UniFi along with it.
    - `supabase/migration-message-senders.sql`
    - `supabase/migration-workflows.sql`
    - `supabase/migration-integrations.sql`
+   - `supabase/migration-staff-only.sql` (before any customer can sign in)
 5. `npm run dev`
 
 ## Integrations

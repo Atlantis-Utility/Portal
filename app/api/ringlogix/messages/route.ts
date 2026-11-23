@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { tenantDomain } from "@/lib/tenancy";
+import { NextResponse } from "next/server";
 import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
 import { externalContactsByPhone } from "@/lib/integrations/store";
-import { getContacts, getMessageSessions, getSubscribers, isConfigured, ourDomain } from "@/lib/ringlogix";
+import { getContacts, getMessageSessions, getSubscribers, isConfigured } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
 import {
   normalizeSession, sortConversations, dedupeConversations, namesByExtension,
@@ -56,7 +57,7 @@ async function everyExtension(domain: string): Promise<RawMessageSession[]> {
   );
 }
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   // The whole shared mailbox: every number, every conversation. This route
   // answered anyone who asked until the check below was added, because
   // proxy.ts deliberately leaves /api/* to check for itself.
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "not_configured" }, { status: 503 });
   }
 
-  const domain = req.nextUrl.searchParams.get("domain")?.trim() || ourDomain();
+  const domain = await tenantDomain();
   if (!domain) {
     return NextResponse.json({ error: "No domain to read messages for" }, { status: 400 });
   }

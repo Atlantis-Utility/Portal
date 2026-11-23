@@ -1,7 +1,8 @@
+import { tenantDomain } from "@/lib/tenancy";
 import { NextRequest, NextResponse } from "next/server";
 import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
 import {
-  getMessageSessions, getSubscribers, sendMessage, setMessageSessionName, isConfigured, ourDomain,
+  getMessageSessions, getSubscribers, sendMessage, setMessageSessionName, isConfigured,
 } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
 import { digitsOf, extensionOf, remoteNumbersOf, type RawMessageSession } from "@/lib/ringlogix-messages";
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
       name?: string;
     };
 
-    const domain = (body.domain ?? "").trim() || ourDomain();
+    const domain = await tenantDomain();
     const text = (body.text ?? "").trim();
     // One number, or several for a group - the PBX addresses a group by
     // listing them, comma separated. A short number is an extension: a

@@ -12,6 +12,7 @@ import {
   StickyNote,
   ScrollText,
   Plug,
+  Workflow,
   Settings2,
   ChevronLeft,
   ChevronRight,
@@ -40,6 +41,7 @@ interface SidebarProps {
 const ICONS: Record<string, React.ElementType> = {
   "/":          LayoutDashboard,
   "/messages":  MessageSquare,
+  "/workflows": Workflow,
   "/contacts":  BookUser,
   "/employees": Users,
   "/calendar":  CalendarDays,

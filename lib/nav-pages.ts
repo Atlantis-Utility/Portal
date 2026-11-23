@@ -26,6 +26,7 @@ export interface NavPage {
 export const NAV_PAGES: NavPage[] = [
   { href: "/",           label: "Dashboard", section: "Workspace" },
   { href: "/messages",   label: "Messages",  section: "Workspace" },
+  { href: "/workflows",  label: "Workflows", section: "Workspace" },
 
   { href: "/contacts",   label: "Contacts",  section: "People"    },
   { href: "/employees",  label: "Employees", section: "People"    },

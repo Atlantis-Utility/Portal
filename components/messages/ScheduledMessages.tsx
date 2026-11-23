@@ -37,7 +37,10 @@ interface Props {
   senders: Array<{ number: string; user: string }>;
   /** Opened from a conversation: start a new schedule aimed at it. */
   prefill?: SchedulePrefill | null;
-  onClose: () => void;
+  /** The pop-up's close. Not needed when shown as a page. */
+  onClose?: () => void;
+  /** Shown as a page (the Workflows tab) rather than a pop-up over Messages. */
+  inline?: boolean;
 }
 
 type View = { mode: "list" } | { mode: "edit"; workflow: Workflow | null };
@@ -48,7 +51,7 @@ type View = { mode: "list" } | { mode: "edit"; workflow: Workflow | null };
  * Everything goes through /api/workflows, which checks the "Schedule
  * messages" grant; this component only decides what to show.
  */
-export default function ScheduledMessages({ conversations, contacts, senders, prefill, onClose }: Props) {
+export default function ScheduledMessages({ conversations, contacts, senders, prefill, onClose, inline = false }: Props) {
   const toast = useToast();
   const confirm = useConfirm();
   const [view, setView] = useState<View>(() => (prefill ? { mode: "edit", workflow: null } : { mode: "list" }));
@@ -111,12 +114,22 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
     }
   }
 
-  return (
-    <Overlay
-      onDismiss={onClose}
-      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-3 md:p-6"
-    >
-      <div className="bg-white border border-[#eaeaea] rounded-2xl shadow-xl w-full max-w-3xl h-[88vh] flex flex-col overflow-hidden">
+  const frame = (children: React.ReactNode) =>
+    inline ? (
+      <div className="bg-white border border-[#eaeaea] rounded-xl flex flex-col overflow-hidden min-h-[60vh]">{children}</div>
+    ) : (
+      <Overlay
+        onDismiss={onClose ?? (() => {})}
+        className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-3 md:p-6"
+      >
+        <div className="bg-white border border-[#eaeaea] rounded-2xl shadow-xl w-full max-w-3xl h-[88vh] flex flex-col overflow-hidden">
+          {children}
+        </div>
+      </Overlay>
+    );
+
+  return frame(
+    <>
         <header className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-[#eaeaea] shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <CalendarClock className="w-4.5 h-4.5 text-[#0070f3] shrink-0" />
@@ -133,13 +146,15 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
                 <Plus className="w-3.5 h-3.5" /> New
               </button>
             )}
-            <button
-              onClick={onClose}
-              className="flex items-center justify-center w-8 h-8 rounded-lg text-[#666] hover:bg-[#fafafa] transition-colors"
-              data-tip="Close"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            {!inline && onClose && (
+              <button
+                onClick={onClose}
+                className="flex items-center justify-center w-8 h-8 rounded-lg text-[#666] hover:bg-[#fafafa] transition-colors"
+                data-tip="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </header>
 
@@ -199,8 +214,7 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
             </ul>
           )}
         </div>
-      </div>
-    </Overlay>
+    </>,
   );
 }
 

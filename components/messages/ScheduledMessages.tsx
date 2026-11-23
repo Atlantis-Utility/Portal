@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Select from "@/components/ui/Select";
 import {
   CalendarClock, X, Plus, Pause, Play, Ban, Trash2, Pencil, RefreshCw, ChevronDown, ChevronRight,
-  Users, MessageSquare, FlaskConical, AlertCircle, Search, MoreHorizontal, ArrowLeft, Repeat as RepeatIcon,
+  Users, MessageSquare, AlertCircle, Search, MoreHorizontal, ArrowLeft, Repeat as RepeatIcon,
   CheckCircle2, Clock, Zap, FileText, Send, LayoutTemplate,
 } from "lucide-react";
 import Overlay from "@/components/ui/Overlay";
@@ -78,7 +78,6 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
   const confirm = useConfirm();
   const [view, setView] = useState<View>(() => (prefill ? { mode: "edit", workflow: null } : { mode: "list" }));
   const [workflows, setWorkflows] = useState<Workflow[] | null>(null);
-  const [live, setLive] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
@@ -94,7 +93,6 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
         if (!alive) return;
         if (!res.ok) throw new Error(data.error ?? "Couldn't load workflows");
         setWorkflows(data.workflows ?? []);
-        setLive(Boolean(data.live));
         setError("");
       } catch (e) {
         if (alive) setError(e instanceof Error ? e.message : "Couldn't load workflows");
@@ -109,10 +107,8 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
     if (what === "run_now") {
       const ok = await confirm({
         title: `Run “${flow.name || "this workflow"}” now?`,
-        description: live
-          ? `This texts ${describeTarget(flow.action.target)} right now, for real. Its schedule doesn't change.`
-          : `Test mode: it runs now and records who it would text, but sends nothing. Its schedule doesn't change.`,
-        confirmLabel: live ? "Send now" : "Run test",
+        description: `This texts ${describeTarget(flow.action.target)} right now. Its schedule doesn't change.`,
+        confirmLabel: "Send now",
       });
       if (!ok) return;
     }
@@ -186,7 +182,6 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
         conversations={conversations}
         contacts={contacts}
         senders={senders}
-        live={live}
         onCancel={() => (prefill && !inline && onClose ? onClose() : setView({ mode: "list" }))}
         onSaved={() => { setView({ mode: "list" }); reload(); }}
       />
@@ -669,7 +664,7 @@ function Step({ n, title, hint, children }: { n: number; title: string; hint?: s
 }
 
 function Editor({
-  workflow, template, prefill, conversations, contacts, senders, live, onCancel, onSaved,
+  workflow, template, prefill, conversations, contacts, senders, onCancel, onSaved,
 }: {
   workflow: Workflow | null;
   template: Template | null;
@@ -677,7 +672,6 @@ function Editor({
   conversations: ScheduleConversation[];
   contacts: Array<{ number: string; name: string }>;
   senders: Array<{ number: string; user: string }>;
-  live: boolean;
   onCancel: () => void;
   onSaved: () => void;
 }) {
@@ -768,10 +762,7 @@ function Editor({
       title: workflow ? "Save changes?" : "Create this workflow?",
       description:
         `It texts ${audienceLabel}, first at ${showTime(checked.firstRunAt)}` +
-        `${repeat !== "none" ? `, then ${REPEAT_LABELS[repeat].toLowerCase()}` : ""}. ` +
-        (live
-          ? "Sending is live: these are real texts to real people, sent without anyone pressing send."
-          : "Test mode is on: it will run and record who it would text, but send nothing."),
+        `${repeat !== "none" ? `, then ${REPEAT_LABELS[repeat].toLowerCase()}` : ""}.`,
       confirmLabel: workflow ? "Save" : "Create workflow",
     });
     if (!ok) return;
@@ -810,7 +801,6 @@ function Editor({
         <span className="text-line-strong">/</span>
         <p className="text-sm font-semibold text-fg">{workflow ? "Edit workflow" : template ? template.name : "New workflow"}</p>
         <div className="ml-auto flex items-center gap-2">
-          {!live && <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-ink-amber"><FlaskConical className="w-3.5 h-3.5" /> Test mode</span>}
           <button onClick={onCancel} className="text-sm font-medium text-fg-muted px-3 h-9 rounded-lg hover:bg-surface-3">Cancel</button>
           <button
             onClick={save}
@@ -1027,7 +1017,6 @@ function Editor({
             <dl className="space-y-2 text-[13px]">
               <div className="flex justify-between gap-3"><dt className="text-fg-muted">To</dt><dd className="text-fg text-right truncate">{audienceLabel}</dd></div>
               <div className="flex justify-between gap-3"><dt className="text-fg-muted">Repeats</dt><dd className="text-fg">{REPEAT_LABELS[repeat]}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-fg-muted">Sending</dt><dd className={live ? "text-ink-green" : "text-ink-amber"}>{live ? "Live" : "Test mode"}</dd></div>
             </dl>
             <div className="border-t border-line pt-3">
               <p className="text-[12px] font-medium text-fg-muted mb-1.5">Upcoming runs</p>

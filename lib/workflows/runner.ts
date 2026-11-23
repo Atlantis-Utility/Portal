@@ -1,6 +1,6 @@
 import "server-only";
 import { getErrorMessage } from "@/lib/utils";
-import { claimDue, finishRun, liveSentSince, recordRun } from "./store";
+import { claimDue, finishRun, liveSentSince, markRunByHand, recordRun } from "./store";
 import { executeSendSms, sendingIsLive, type SendResult } from "./send-sms";
 import { instantOf, nextRun, wallAt } from "./schedule";
 import type { Workflow } from "./types";
@@ -108,6 +108,43 @@ async function runOne(flow: Workflow, live: boolean, nowMs: number): Promise<Sen
     sent: result.sentCount,
     summary: result.summary,
     recipients: result.detail.map((d) => ({ to: d.to, ok: d.ok, note: d.error ?? d.skipped ?? "" })),
+  }).catch(() => {});
+  return result;
+}
+
+/**
+ * Runs one workflow straight away, by hand ("Run now"), leaving its
+ * schedule exactly as it was. Goes through the same send path as the timer
+ * - test mode, opt-outs, the daily cap - and is recorded in its history
+ * like any other run.
+ */
+export async function runWorkflowNow(flow: Workflow, nowMs = Date.now()): Promise<SendResult> {
+  const live = sendingIsLive();
+  let result: SendResult;
+  try {
+    const budget = Math.max(0, dailyCap() - (await liveSentSince(startOfPacificDay(nowMs))));
+    result = await executeSendSms(flow.action, {
+      live,
+      byName: flow.createdByName || flow.createdByEmail || "Scheduled",
+      byEmail: flow.createdByEmail,
+      budget,
+    });
+  } catch (err) {
+    result = { outcome: "failed", sentCount: 0, summary: getErrorMessage(err, "Something went wrong running this."), detail: [] };
+  }
+  result = { ...result, summary: `Run by hand · ${result.summary}` };
+  await recordRun({
+    workflowId: flow.id,
+    scheduledFor: null,
+    outcome: result.outcome,
+    live,
+    sentCount: result.sentCount,
+    summary: result.summary,
+    detail: result.detail,
+  });
+  await markRunByHand(flow.id, flow.runCount + 1);
+  await emit("workflow.run", {
+    workflow: flow.name || flow.id, outcome: result.outcome, live, sent: result.sentCount, summary: result.summary, byHand: true,
   }).catch(() => {});
   return result;
 }

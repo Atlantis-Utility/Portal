@@ -5,7 +5,7 @@ import Select from "@/components/ui/Select";
 import {
   CalendarClock, X, Plus, Pause, Play, Ban, Trash2, Pencil, RefreshCw, ChevronDown, ChevronRight,
   Users, MessageSquare, FlaskConical, AlertCircle, Search, MoreHorizontal, ArrowLeft, Repeat as RepeatIcon,
-  CheckCircle2, Clock, Zap, FileText, CalendarCheck, Receipt, Wrench, PartyPopper,
+  CheckCircle2, Clock, Zap, FileText, Send, CalendarCheck, Receipt, Wrench, PartyPopper,
 } from "lucide-react";
 import Overlay from "@/components/ui/Overlay";
 import DateTimePicker from "@/components/ui/DateTimePicker";
@@ -142,7 +142,17 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
 
   const reload = () => setVersion((v) => v + 1);
 
-  async function act(flow: Workflow, what: "pause" | "resume" | "cancel" | "delete") {
+  async function act(flow: Workflow, what: "pause" | "resume" | "cancel" | "delete" | "run_now") {
+    if (what === "run_now") {
+      const ok = await confirm({
+        title: `Run “${flow.name || "this workflow"}” now?`,
+        description: live
+          ? `This texts ${describeTarget(flow.action.target)} right now, for real. Its schedule doesn't change.`
+          : `Test mode: it runs now and records who it would text, but sends nothing. Its schedule doesn't change.`,
+        confirmLabel: live ? "Send now" : "Run test",
+      });
+      if (!ok) return;
+    }
     if (what === "cancel" || what === "delete") {
       const ok = await confirm({
         title: what === "cancel" ? `Cancel “${flow.name || "this workflow"}”?` : `Delete “${flow.name || "this workflow"}”?`,
@@ -164,7 +174,12 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
           });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "That didn't work");
-      toast.success({ pause: "Paused.", resume: "Resumed.", cancel: "Canceled.", delete: "Deleted." }[what]);
+      if (what === "run_now") {
+        const r = (data.result ?? {}) as { outcome?: string; summary?: string };
+        (r.outcome === "failed" ? toast.error : toast.success)(r.summary ?? "Ran.");
+      } else {
+        toast.success({ pause: "Paused.", resume: "Resumed.", cancel: "Canceled.", delete: "Deleted." }[what]);
+      }
       reload();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "That didn't work");
@@ -431,7 +446,7 @@ function Row({
   flow: Workflow;
   busy: boolean;
   onEdit: () => void;
-  onAct: (what: "pause" | "resume" | "cancel" | "delete") => void;
+  onAct: (what: "pause" | "resume" | "cancel" | "delete" | "run_now") => void;
 }) {
   const [open, setOpen] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -486,6 +501,7 @@ function Row({
             <>
               <div className="fixed inset-0 z-30" onClick={() => setMenu(false)} />
               <div className="absolute right-0 top-full mt-1 z-40 w-44 bg-surface border border-line rounded-xl shadow-xl p-1">
+                {flow.status !== "canceled" && <button className={item} onClick={() => { setMenu(false); onAct("run_now"); }}><Send className="w-3.5 h-3.5 text-fg-muted" /> Run now</button>}
                 {!done && <button className={item} onClick={() => { setMenu(false); onEdit(); }}><Pencil className="w-3.5 h-3.5 text-fg-muted" /> Edit</button>}
                 {flow.status === "active" && <button className={item} onClick={() => { setMenu(false); onAct("pause"); }}><Pause className="w-3.5 h-3.5 text-fg-muted" /> Pause</button>}
                 {flow.status === "paused" && <button className={item} onClick={() => { setMenu(false); onAct("resume"); }}><Play className="w-3.5 h-3.5 text-fg-muted" /> Resume</button>}

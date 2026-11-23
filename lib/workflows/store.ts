@@ -222,3 +222,13 @@ export async function liveSentSince(sinceIso: string): Promise<number> {
   if (error) throw error;
   return ((data ?? []) as Array<{ sent_count: number }>).reduce((n, r) => n + (r.sent_count ?? 0), 0);
 }
+
+/** After a "Run now": counts the run without touching the schedule. */
+export async function markRunByHand(id: string, runCount: number): Promise<void> {
+  const now = new Date().toISOString();
+  const { error } = await db()
+    .from("workflows")
+    .update({ last_run_at: now, run_count: runCount, updated_at: now })
+    .eq("id", id);
+  if (error) throw error;
+}

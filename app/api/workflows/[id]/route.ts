@@ -4,6 +4,7 @@ import { requirePageOption, ApiAuthError } from "@/lib/api-auth";
 import { deleteWorkflow, getWorkflow, listRuns, updateWorkflow } from "@/lib/workflows/store";
 import { checkScheduledSms } from "@/lib/workflows/validate";
 import { firstRun } from "@/lib/workflows/schedule";
+import { runWorkflowNow } from "@/lib/workflows/runner";
 import { SCHEDULE_OPTION } from "@/lib/workflows/types";
 
 export const runtime = "nodejs";
@@ -70,6 +71,15 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       const workflow = await updateWorkflow(id, { status: "canceled", nextRunAt: null });
       console.log(`[workflows] ${actor.email} canceled "${current.name || id}"`);
       return NextResponse.json({ workflow });
+    }
+
+    if (body.do === "run_now") {
+      if (current.status === "canceled") {
+        return NextResponse.json({ error: "A canceled workflow can't be run." }, { status: 400 });
+      }
+      const result = await runWorkflowNow(current);
+      console.log(`[workflows] ${actor.email} ran "${current.name || id}" by hand: ${result.outcome}`);
+      return NextResponse.json({ result });
     }
 
     if (body.do === "edit") {

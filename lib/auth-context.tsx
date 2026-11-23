@@ -108,9 +108,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // user_profiles and employees (matched by email) don't depend on each
       // other, so fire both in parallel instead of waiting on one to resolve
       // before starting the next — halves the round-trip time on every load.
+      // Email matched without regard to case (Microsoft can hand back
+      // "Yash.H@…" for an address stored as "yash.h@…"), with ILIKE's own
+      // wildcards escaped so an underscore in an address stays literal.
+      const emailPattern = (user.email ?? "").replace(/[\\%_]/g, (c) => `\\${c}`);
       const [profileResult, employeeByEmailResult] = await Promise.allSettled([
         supabase.from("user_profiles").select("employee_id, is_admin").eq("uid", user.id).maybeSingle(),
-        supabase.from("employees").select("id, name, data").eq("email", user.email).maybeSingle(),
+        supabase.from("employees").select("id, name, data").ilike("email", emailPattern).maybeSingle(),
       ]);
 
       const employeeByEmail =
@@ -128,10 +132,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Both queries have to have actually answered: a failed lookup is not
       // evidence of absence, and locking a real administrator out because
       // the table was briefly unreachable is the worse mistake.
+      //
+      // "Answered" means no error, not merely a fulfilled promise: the
+      // Supabase client never rejects, it resolves with { data: null, error }.
+      // Checking only `fulfilled` read every failed lookup as "not an
+      // employee" - and the likeliest failure is the request that lands
+      // as the access token expires, so people were signed out roughly an
+      // hour into every session, or on coming back to a backgrounded tab.
+      const answered = (r: typeof profileResult | typeof employeeByEmailResult) =>
+        r.status === "fulfilled" && !r.value.error;
       if (
+        answered(profileResult) &&
         profileResult.status === "fulfilled" &&
         !profileResult.value.data &&
-        employeeByEmailResult.status === "fulfilled" &&
+        answered(employeeByEmailResult) &&
         !employeeByEmail
       ) {
         console.warn("[auth] no employee record for", user.email);
@@ -141,6 +155,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAuthUser(null);
         setLoading(false);
         await supabase.auth.signOut();
+        return;
+      }
+
+      // A background refresh whose lookups failed has nothing new to say:
+      // keep the profile already loaded rather than rebuilding permissions
+      // from an empty answer until the next refresh.
+      if (silent && (!answered(profileResult) || !answered(employeeByEmailResult))) {
+        console.warn("[auth] profile refresh failed; keeping the current session as it was");
         return;
       }
 

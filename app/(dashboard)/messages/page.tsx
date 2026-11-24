@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { saveContact } from "@/lib/contact-save";
 import Select from "@/components/ui/Select";
 import {
@@ -201,6 +201,12 @@ function Thread({
   const toast = useToast();
   const [messages, setMessages] = useState<SmsMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  // A "New" line above what arrived since you last looked, the way a chat
+  // app marks it: taken from whether the conversation was unread when it
+  // opened (before opening it marks it read), and placed above the run of
+  // incoming messages since our last reply. Fixed for as long as it's open.
+  const [wasUnread] = useState(conversation.unread);
+  const [newFrom, setNewFrom] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState("");
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -402,6 +408,17 @@ function Thread({
           <p className="py-10 text-center text-xs text-[#999]">Nothing in this conversation yet.</p>
         )}
 
+        {(() => {
+          // Worked out once, when the messages first arrive.
+          if (newFrom === undefined && !loading && messages.length > 0) {
+            let first: string | null = null;
+            if (wasUnread) {
+              for (let i = messages.length - 1; i >= 0 && messages[i].direction !== "out"; i--) first = messages[i].id;
+            }
+            setNewFrom(first);
+          }
+          return null;
+        })()}
         {messages.map((m) => {
           const mine = m.direction === "out";
           // Ours either because the ERP recorded us as the sender, or
@@ -417,7 +434,14 @@ function Thread({
             : "";
           const who = m.fromName ? (isMe ? `${m.fromName} (you)` : m.fromName) : sender || them;
           return (
-            <div key={m.id} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
+            <Fragment key={m.id}>
+            {m.id === newFrom && (
+              <div className="flex items-center gap-3 py-1" role="separator" aria-label="New messages">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#0070f3]">New</span>
+                <span className="h-px flex-1 bg-[#0070f3]/30" />
+              </div>
+            )}
+            <div className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
               {/* The circle sits on the bubble's bottom edge, the way a
                   chat reads, and the time sits under the bubble rather
                   than under the circle - both were floating before. */}
@@ -492,6 +516,7 @@ function Thread({
                 {fullTime(m.at)}
               </p>
             </div>
+            </Fragment>
           );
         })}
         <div ref={bottom} />
@@ -1474,6 +1499,15 @@ export default function MessagesPage() {
             </button>
           )}
           <button
+            onClick={reload}
+            disabled={state === "loading"}
+            data-tip="Fetch the latest conversations"
+            className="flex items-center gap-2 border border-[#eaeaea] bg-white text-sm font-medium text-[#0a0a0a] px-3.5 h-9 rounded-lg hover:bg-[#fafafa] transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${state === "loading" ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+          <button
             onClick={() => setShowDetails((v) => !v)}
             data-tip={showDetails ? "Hide notes and tags" : "Show notes and tags"}
             className={`hidden lg:flex items-center justify-center w-9 h-9 rounded-lg border transition-colors ${
@@ -1483,15 +1517,6 @@ export default function MessagesPage() {
             }`}
           >
             <PanelRight className="w-4 h-4" />
-          </button>
-          <button
-            onClick={reload}
-            disabled={state === "loading"}
-            data-tip="Fetch the latest conversations"
-            className="flex items-center gap-2 border border-[#eaeaea] bg-white text-sm font-medium text-[#0a0a0a] px-3.5 h-9 rounded-lg hover:bg-[#fafafa] transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${state === "loading" ? "animate-spin" : ""}`} />
-            Refresh
           </button>
         </div>
       </div>

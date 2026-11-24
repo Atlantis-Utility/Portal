@@ -109,9 +109,10 @@ export default function EmployeesPage() {
 
   const filtered = employees.filter((emp) => {
     const matchesSearch =
-      emp.name.toLowerCase().includes(search.toLowerCase()) ||
-      emp.email.toLowerCase().includes(search.toLowerCase()) ||
-      emp.role.toLowerCase().includes(search.toLowerCase());
+      // Fields can be missing on a record added elsewhere; search what's there.
+      (emp.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (emp.email ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (emp.role ?? "").toLowerCase().includes(search.toLowerCase());
     const matchesStatus =
       selectedStatus === "All Statuses" || emp.status === selectedStatus;
     return matchesSearch && matchesStatus;
@@ -244,8 +245,8 @@ export default function EmployeesPage() {
                     </td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <LoginCell
-                        state={logins ? loginState(logins[emp.email.toLowerCase()]) : null}
-                        info={logins?.[emp.email.toLowerCase()]}
+                        state={logins ? loginState(logins[(emp.email ?? "").toLowerCase()]) : null}
+                        info={logins?.[(emp.email ?? "").toLowerCase()]}
                         canInvite={canInvite}
                         busy={inviting === emp.id}
                         onInvite={() => invite(emp)}

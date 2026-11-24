@@ -26,21 +26,31 @@ export function getAvatarColor(name: string): { bg: string; text: string } {
     { bg: 'bg-[#fff8e6]', text: 'text-[#f5a524]' },
     { bg: 'bg-[#f1f1f1]', text: 'text-[#666]' },
   ];
-  const index = name.charCodeAt(0) % colors.length;
-  return colors[index];
+  // A blank name (a person saved without one, an attendee with only an
+  // address) used to give charCodeAt(0) = NaN, colors[NaN] = undefined, and
+  // a page-wide crash reading ".bg". Every caller gets a colour now.
+  const code = String(name ?? "").trim().charCodeAt(0);
+  return colors[Number.isFinite(code) ? code % colors.length : colors.length - 1];
 }
 
 export function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
+  // Same guard as getAvatarColor: a missing name is "?" rather than a crash.
+  const initials = String(name ?? "")
+    .trim()
+    .split(/\s+/)
+    .map((n) => n[0] ?? "")
+    .join("")
     .toUpperCase()
     .slice(0, 2);
+  return initials || "?";
 }
 
 export function formatDate(dateStr: string): string {
+  // A record saved without a date (or with a broken one) shows a dash, not
+  // a crash of the whole page it's listed on.
+  if (!dateStr || typeof dateStr !== "string") return "-";
   const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "-";
   const hasTime = dateStr.includes("T") && !dateStr.endsWith("T00:00") && !dateStr.endsWith("T00:00:00.000Z");
   if (hasTime) {
     return d.toLocaleString("en-US", {

@@ -9,6 +9,7 @@ import { getInitials, formatPhone } from "@/lib/utils";
 import { Pencil, Check, Mail, Shield, Clock, Phone, MapPin, Briefcase, Building2, X, Calendar, Activity } from "lucide-react";
 import Header from "@/components/layout/Header";
 import ChangePasswordForm from "@/components/auth/ChangePasswordForm";
+import GoogleContactsCard from "@/components/account/GoogleContactsCard";
 import { useToast } from "@/lib/toast";
 import { KeyRound } from "lucide-react";
 import FormField, { inputClass } from "@/components/ui/FormField";
@@ -449,6 +450,7 @@ export default function AccountPage() {
           </div>
 
           <PasswordCard />
+          <GoogleContactsCard />
         </div>
 
         {/* ── Right: activity ── */}

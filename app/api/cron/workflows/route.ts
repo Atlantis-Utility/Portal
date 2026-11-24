@@ -3,9 +3,12 @@ import { getErrorMessage } from "@/lib/utils";
 import { timingSafeEqual } from "node:crypto";
 import { runDueWorkflows } from "@/lib/workflows/runner";
 import { runDueSyncs } from "@/lib/integrations/engine";
+import { runDueGoogleSyncs } from "@/lib/google-contacts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Room for the Google Contacts writes, which stop themselves at 45s.
+export const maxDuration = 60;
 
 /**
  * The timer's door. Called every minute by Supabase (pg_cron + pg_net, see
@@ -57,7 +60,14 @@ async function handle(req: NextRequest) {
     } catch (err) {
       console.error("[integrations] sync run failed:", getErrorMessage(err, "unknown"));
     }
-    return NextResponse.json({ ...report, syncs });
+    // And everyone's Google Contacts, each on its own clock.
+    let google: Awaited<ReturnType<typeof runDueGoogleSyncs>> = [];
+    try {
+      google = await runDueGoogleSyncs();
+    } catch (err) {
+      console.error("[google-contacts] sync run failed:", getErrorMessage(err, "unknown"));
+    }
+    return NextResponse.json({ ...report, syncs, google });
   } catch (err) {
     const message = getErrorMessage(err, "Run failed");
     console.error("[workflows] run failed:", message);

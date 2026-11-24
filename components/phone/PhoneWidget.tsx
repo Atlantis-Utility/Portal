@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Phone, PhoneOff, Mic, MicOff, Pause, Play, Grid3x3, Delete, X, RefreshCw, PhoneIncoming, PhoneOutgoing,
-  PhoneMissed, Search, Users, Clock, Voicemail as VoicemailIcon, ChevronDown, ArrowRightLeft,
+  Phone, Grid3x3, Delete, X, RefreshCw, PhoneIncoming, PhoneOutgoing,
+  PhoneMissed, Search, Users, Clock, Voicemail as VoicemailIcon, ChevronDown, ArrowRightLeft, Sparkles, Info,
 } from "lucide-react";
+import CallDetailPanel from "@/components/calls/CallDetailPanel";
 import { usePhoneState, type CallInfo } from "./PhoneProvider";
+import CallScreen from "./CallScreen";
 import { colourFor, initialsFor } from "@/components/messages/Avatar";
 import { formatPhone } from "@/lib/utils";
 import { whoHas, type DirectoryEntry, type Recents } from "@/lib/phone/types";
@@ -86,17 +88,6 @@ function Keypad({ onKey, compact }: { onKey: (k: string) => void; compact?: bool
   );
 }
 
-function Control({ onClick, label, active, children, disabled }: { onClick: () => void; label: string; active?: boolean; children: React.ReactNode; disabled?: boolean }) {
-  return (
-    <button type="button" onClick={onClick} disabled={disabled} className="flex flex-col items-center gap-1.5 disabled:opacity-35 group">
-      <span className={`w-15 h-15 rounded-full flex items-center justify-center transition-colors ${active ? "bg-fg text-surface" : "bg-surface-3 text-fg group-hover:bg-line"}`}>
-        {children}
-      </span>
-      <span className="text-[11px] font-medium text-fg-muted">{label}</span>
-    </button>
-  );
-}
-
 function Empty({ icon: Icon, title, text }: { icon: typeof Phone; title: string; text: string }) {
   return (
     <div className="h-full flex flex-col items-center justify-center text-center px-8">
@@ -145,6 +136,7 @@ function recentRows(recents: Recents, directory: DirectoryEntry[] | null): Recen
 
 function RecentsTab({ recents, directory, onCall }: { recents: Recents | null; directory: DirectoryEntry[] | null; onCall: (n: string, name: string) => void }) {
   const [filter, setFilter] = useState<"all" | "missed">("all");
+  const [openId, setOpenId] = useState<string | null>(null);
   const rows = useMemo(() => (recents ? recentRows(recents, directory) : []), [recents, directory]);
   const list = filter === "missed" ? rows.filter((r) => r.kind === "missed") : rows;
   return (
@@ -168,13 +160,16 @@ function RecentsTab({ recents, directory, onCall }: { recents: Recents | null; d
               {list.map((r) => {
                 const Icon = r.kind === "missed" ? PhoneMissed : r.kind === "out" ? PhoneOutgoing : r.kind === "internal" ? ArrowRightLeft : PhoneIncoming;
                 const label = r.name || shown(r.number) || "Unknown";
+                const hasDetail = r.call.answered && r.call.talkSec > 0;
+                const expanded = openId === r.call.id;
                 return (
-                  <li key={r.call.id}>
+                  <li key={r.call.id} className={expanded ? "bg-surface-3" : ""}>
+                    <div className="flex items-center">
                     <button
                       type="button"
                       onClick={() => r.number && onCall(r.number, r.name)}
                       disabled={!r.number}
-                      className="group w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-3 transition-colors"
+                      className="group flex-1 min-w-0 flex items-center gap-3 pl-4 pr-2 py-2.5 text-left hover:bg-surface-3 transition-colors"
                     >
                       <Avatar name={label} />
                       <span className="min-w-0 flex-1">
@@ -193,6 +188,24 @@ function RecentsTab({ recents, directory, onCall }: { recents: Recents | null; d
                         <Phone className="w-3.5 h-3.5 text-ink-green opacity-0 group-hover:opacity-100 transition-opacity" />
                       </span>
                     </button>
+                    {/* Recording, transcript and summary, as on the Inbox. */}
+                    {hasDetail ? (
+                      <button
+                        type="button"
+                        onClick={() => setOpenId(expanded ? null : r.call.id)}
+                        aria-label={expanded ? "Hide call details" : "Recording and transcript"}
+                        title="Recording and transcript"
+                        className={`mr-2 w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-colors ${expanded ? "bg-fg text-surface" : "text-fg-subtle hover:bg-line hover:text-fg"}`}
+                      >
+                        {r.call.transcribed ? <Sparkles className="w-3.5 h-3.5" /> : <Info className="w-3.5 h-3.5" />}
+                      </button>
+                    ) : <span className="mr-2 w-7 shrink-0" />}
+                    </div>
+                    {expanded && (
+                      <div className="px-4 pb-3">
+                        <CallDetailPanel id={r.call.id} compact />
+                      </div>
+                    )}
                   </li>
                 );
               })}
@@ -432,7 +445,6 @@ function KeypadTab({ ready, extension, directory, onCall }: { ready: boolean; ex
 export default function PhoneWidget() {
   const phone = usePhoneState();
   const [tab, setTab] = useState<Tab>("keypad");
-  const [keypad, setKeypad] = useState(false);
   const [seen, setSeen] = useState(() => {
     try { return Number(localStorage.getItem(SEEN_KEY) ?? 0) || 0; } catch { return 0; }
   });
@@ -470,13 +482,6 @@ export default function PhoneWidget() {
   };
   const callFrom = (n: string, name: string) => phone.dial(n, name);
 
-  const stateText = !call ? ""
-    : call.state === "ended" ? call.endedReason
-    : call.state === "ringing" ? "Incoming call"
-    : call.state === "dialing" ? "Calling…"
-    : call.state === "early" ? "Ringing…"
-    : call.held ? `On hold · ${clock}` : clock;
-  const who = call ? call.name || shown(call.number) || "Unknown caller" : "";
   const vmCount = recents?.voicemails.length ?? 0;
 
   const tabs: Array<{ id: Tab; label: string; Icon: typeof Phone; badge?: number }> = [
@@ -528,73 +533,7 @@ export default function PhoneWidget() {
           )}
 
           {call ? (
-            // ── A call: ringing, in progress, or just ended ──
-            <div className="flex-1 flex flex-col px-6 pt-10 pb-8">
-              <div className="flex flex-col items-center text-center">
-                <div className={`rounded-full p-1.5 ${ringing ? "ring-4 ring-[#17c964]/25 animate-pulse" : ""}`}>
-                  <Avatar name={call.name || call.number} size="lg" />
-                </div>
-                <p className="mt-4 text-xl font-semibold text-fg truncate max-w-full">{who}</p>
-                {call.name && <p className="text-sm text-fg-muted tabular-nums mt-0.5">{shown(call.number)}</p>}
-                <p className={`mt-3 inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${
-                  call.state === "ended" ? "bg-tint-rose text-ink-rose"
-                    : live ? (call.held ? "bg-tint-amber text-ink-amber" : "bg-tint-green text-ink-green")
-                    : "bg-surface-3 text-fg-muted"
-                }`}>
-                  {live && !call.held && <span className="w-1.5 h-1.5 rounded-full bg-[#17c964] animate-pulse" />}
-                  <span className="tabular-nums">{stateText}</span>
-                </p>
-              </div>
-
-              <div className="flex-1" />
-
-              {ringing ? (
-                <div className="flex items-center justify-center gap-16">
-                  <button type="button" onClick={phone.decline} className="flex flex-col items-center gap-2">
-                    <span className="w-16 h-16 rounded-full bg-[#f31260] hover:bg-[#d10f52] text-white flex items-center justify-center shadow-lg transition-colors"><PhoneOff className="w-7 h-7" /></span>
-                    <span className="text-xs font-medium text-fg-muted">Decline</span>
-                  </button>
-                  <button type="button" onClick={phone.answer} className="flex flex-col items-center gap-2">
-                    <span className="w-16 h-16 rounded-full bg-[#17c964] hover:bg-[#12a150] text-white flex items-center justify-center shadow-lg transition-colors"><Phone className="w-7 h-7" /></span>
-                    <span className="text-xs font-medium text-fg-muted">Answer</span>
-                  </button>
-                </div>
-              ) : call.state !== "ended" ? (
-                <>
-                  {keypad && live ? (
-                    <div className="mb-6"><Keypad onKey={phone.sendTone} compact /></div>
-                  ) : (
-                    <div className="grid grid-cols-3 gap-3 mb-10">
-                      <Control onClick={phone.toggleMute} label={call.muted ? "Unmute" : "Mute"} active={call.muted}>
-                        {call.muted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
-                      </Control>
-                      <Control onClick={() => setKeypad(true)} label="Keypad" disabled={!live}>
-                        <Grid3x3 className="w-6 h-6" />
-                      </Control>
-                      <Control onClick={phone.toggleHold} label={call.held ? "Resume" : "Hold"} active={call.held} disabled={!live}>
-                        {call.held ? <Play className="w-6 h-6" /> : <Pause className="w-6 h-6" />}
-                      </Control>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-3 items-center">
-                    <span className="flex justify-center">
-                      {keypad && live && <button type="button" onClick={() => setKeypad(false)} className="text-xs font-medium text-fg-muted hover:text-fg">Hide</button>}
-                    </span>
-                    <span className="flex justify-center">
-                      <button
-                        type="button"
-                        onClick={() => { setKeypad(false); phone.hangup(); }}
-                        className="w-16 h-16 rounded-full bg-[#f31260] hover:bg-[#d10f52] text-white flex items-center justify-center shadow-lg transition-colors"
-                        aria-label="Hang up"
-                      >
-                        <PhoneOff className="w-7 h-7" />
-                      </button>
-                    </span>
-                    <span />
-                  </div>
-                </>
-              ) : null}
-            </div>
+            <CallScreen phone={phone} />
           ) : (
             <>
               <div className="flex-1 min-h-0">

@@ -43,7 +43,7 @@ interface PhoneLogin {
   error?: string;
 }
 
-interface PhoneApi {
+export interface PhoneApi {
   status: PhoneStatus;
   extension: string;
   error: string;
@@ -59,6 +59,24 @@ interface PhoneApi {
   toggleHold: () => void;
   sendTone: (tone: string) => void;
   retry: () => void;
+  /** A second call, while the first waits on hold (consult / add call). */
+  second: CallInfo | null;
+  /** Both calls joined, this browser mixing the audio. */
+  conference: boolean;
+  /** "Transferring…", "Transfer failed", and the like. */
+  notice: string;
+  /** Hands the call to someone else and drops out (blind transfer). */
+  transfer: (number: string) => void;
+  /** Puts the call on hold and rings someone else (warm transfer / add call). */
+  consult: (number: string, name?: string) => void;
+  /** Connects the held caller to the second call and drops out. */
+  completeTransfer: () => void;
+  /** Joins the held caller and the second call into one conversation. */
+  merge: () => void;
+  /** Ends the second call (or removes them from a conference). */
+  endSecond: () => void;
+  /** Ends the first call only; the second carries on as the main call. */
+  endMain: () => void;
   /** Contacts and colleagues to call; null until first asked for. */
   directory: DirectoryEntry[] | null;
   loadDirectory: (refresh?: boolean) => void;
@@ -145,11 +163,16 @@ function makeTones() {
   };
 }
 
+type Line = "main" | "second";
+
 export function PhoneProvider({ enabled, children }: { enabled: boolean; children: ReactNode }) {
   const [status, setStatus] = useState<PhoneStatus>("off");
   const [extension, setExtension] = useState("");
   const [error, setError] = useState("");
   const [call, setCall] = useState<CallInfo | null>(null);
+  const [second, setSecond] = useState<CallInfo | null>(null);
+  const [conference, setConference] = useState(false);
+  const [notice, setNotice] = useState("");
   const [open, setOpen] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [directory, setDirectory] = useState<DirectoryEntry[] | null>(null);
@@ -187,22 +210,51 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
   }, []);
 
   const uaRef = useRef<UA | null>(null);
-  const sessionRef = useRef<RTCSession | null>(null);
+  // Up to two calls: the main one, and a second while the main one waits on
+  // hold (asking someone before transferring, or adding them to the call).
+  const sessions = useRef<Record<Line, RTCSession | null>>({ main: null, second: null });
+  // What each line shows, kept in a ref too so an event can read the other
+  // line's current state (e.g. promoting the second call when the first ends).
+  const infos = useRef<Record<Line, CallInfo | null>>({ main: null, second: null });
+  const audios = useRef(new Map<RTCSession, HTMLAudioElement>());
+  const transferred = useRef(new WeakSet<RTCSession>());
+  const conf = useRef<{ mics: MediaStreamTrack[]; restore: () => void } | null>(null);
   const domainRef = useRef("");
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const tonesRef = useRef<ReturnType<typeof makeTones> | null>(null);
   const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const tones = () => (tonesRef.current ??= makeTones());
-  const patchCall = useCallback((patch: Partial<CallInfo>) => setCall((c) => (c ? { ...c, ...patch } : c)), []);
 
-  /** Plays the far end's audio, whenever the connection brings it. */
-  const attachAudio = useCallback((pc: RTCPeerConnection) => {
+  const update = useCallback((line: Line, next: CallInfo | null | ((c: CallInfo | null) => CallInfo | null)) => {
+    const value = typeof next === "function" ? next(infos.current[line]) : next;
+    infos.current[line] = value;
+    (line === "main" ? setCall : setSecond)(value);
+  }, []);
+  const lineOf = (session: RTCSession): Line | null =>
+    sessions.current.main === session ? "main" : sessions.current.second === session ? "second" : null;
+  const patch = useCallback((session: RTCSession, p: Partial<CallInfo>) => {
+    const line = sessions.current.main === session ? "main" : sessions.current.second === session ? "second" : null;
+    if (line) update(line, (c) => (c ? { ...c, ...p } : c));
+  }, [update]);
+
+  const say = useCallback((text: string, clearAfter = 4000) => {
+    setNotice(text);
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    if (clearAfter) noticeTimer.current = setTimeout(() => setNotice(""), clearAfter);
+  }, []);
+
+  /** Plays a call's far end on its own element, whenever the audio arrives. */
+  const attachAudio = useCallback((session: RTCSession, pc: RTCPeerConnection) => {
+    let el = audios.current.get(session);
+    if (!el) {
+      el = new Audio();
+      el.autoplay = true;
+      audios.current.set(session, el);
+    }
     const play = (stream: MediaStream) => {
-      const el = audioRef.current;
-      if (!el) return;
-      el.srcObject = stream;
-      void el.play().catch(() => { /* blocked until the next click; rare once someone has clicked Call/Answer */ });
+      el!.srcObject = stream;
+      void el!.play().catch(() => { /* blocked until the next click; rare once someone has clicked Call/Answer */ });
     };
     pc.addEventListener("track", (e) => play(e.streams[0] ?? new MediaStream([e.track])));
     // Already-present tracks (an answer can beat the listener).
@@ -210,9 +262,16 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
     if (existing.length) play(new MediaStream(existing));
   }, []);
 
-  /** Wires up a call's events, incoming or outgoing alike. */
+  /** Back to two separate calls: each sends its own microphone again. */
+  const endConference = useCallback(() => {
+    if (!conf.current) return;
+    try { conf.current.restore(); } catch { /* the call that needed it is gone */ }
+    conf.current = null;
+    setConference(false);
+  }, []);
+
+  /** Wires up a call's events, incoming or outgoing, on either line. */
   const track = useCallback((session: RTCSession) => {
-    sessionRef.current = session;
     // Don't wait for every ICE candidate: on some networks the last one
     // takes many seconds to give up. One public address is enough.
     session.on("icecandidate", (e: { candidate: RTCIceCandidate; ready: () => void }) => {
@@ -220,7 +279,7 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
     });
     session.on("progress", (e: { originator: string; response?: { status_code?: number; body?: string } }) => {
       if (session.direction !== "outgoing") return;
-      patchCall({ state: "early" });
+      patch(session, { state: "early" });
       // 180 with no audio of its own: ring locally. 183 brings the
       // network's own ringback (or a recording), so stay quiet.
       if (!e.response?.body) tones().ringback();
@@ -228,28 +287,55 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
     });
     session.on("accepted", () => {
       tones().stop();
-      patchCall({ state: "active", startedAt: Date.now() });
+      patch(session, { state: "active", startedAt: Date.now() });
     });
-    session.on("hold", () => patchCall({ held: true }));
-    session.on("unhold", () => patchCall({ held: false }));
-    session.on("muted", () => patchCall({ muted: true }));
-    session.on("unmuted", () => patchCall({ muted: false }));
+    session.on("hold", () => patch(session, { held: true }));
+    session.on("unhold", () => patch(session, { held: false }));
+    session.on("muted", () => patch(session, { muted: true }));
+    session.on("unmuted", () => patch(session, { muted: false }));
     const finish = (e: { cause?: string; originator?: string }) => {
       tones().stop();
-      if (sessionRef.current === session) sessionRef.current = null;
-      if (audioRef.current) audioRef.current.srcObject = null;
-      const reason = e.cause === "Terminated" || e.cause === "Bye" ? "Call ended"
+      const line = lineOf(session);
+      const el = audios.current.get(session);
+      if (el) el.srcObject = null;
+      audios.current.delete(session);
+      endConference();
+      const reason = transferred.current.has(session) ? "Transferred"
+        : e.cause === "Terminated" || e.cause === "Bye" ? "Call ended"
         : e.cause === "Canceled" && session.direction === "incoming" ? "Missed call"
         : END_REASONS[e.cause ?? ""] ?? (e.cause ? String(e.cause) : "Call ended");
-      setCall((c) => (c ? { ...c, state: "ended", endedReason: reason } : c));
-      if (clearTimer.current) clearTimeout(clearTimer.current);
-      clearTimer.current = setTimeout(() => setCall((c) => (c?.state === "ended" ? null : c)), 2500);
+
+      if (line === "second") {
+        sessions.current.second = null;
+        update("second", null);
+        // Back to whoever was waiting.
+        const main = sessions.current.main;
+        if (main && main.isOnHold().local && !transferred.current.has(main)) main.unhold();
+        if (!transferred.current.has(session)) say(`${reason}${infos.current.main ? `. Back to ${infos.current.main.name || infos.current.main.number}` : ""}`);
+      } else if (line === "main") {
+        const next = sessions.current.second;
+        if (next && !transferred.current.has(next)) {
+          // The first caller left while someone else was on the line: carry
+          // on with them.
+          sessions.current.main = next;
+          sessions.current.second = null;
+          update("main", infos.current.second);
+          update("second", null);
+          if (next.isOnHold().local) next.unhold();
+          say(`${infos.current.main?.name || "The other caller"} is still with you`);
+        } else {
+          sessions.current.main = null;
+          update("main", (c) => (c ? { ...c, state: "ended", endedReason: reason } : c));
+          if (clearTimer.current) clearTimeout(clearTimer.current);
+          clearTimer.current = setTimeout(() => update("main", (c) => (c?.state === "ended" ? null : c)), 2500);
+        }
+      }
       // The call record reaches RingLogix's history a few seconds after.
       if (recentsWanted.current) setTimeout(loadRecents, 5000);
     };
     session.on("ended", finish);
     session.on("failed", finish);
-  }, [patchCall, loadRecents]);
+  }, [patch, update, say, endConference, loadRecents]);
 
   // Signs this browser in to RingLogix (and out again on the way out).
   useEffect(() => {
@@ -310,23 +396,24 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
         ua.on("newRTCSession", (e: { session: RTCSession; originator: string; request: { from?: { display_name?: string; uri?: { user?: string } } } }) => {
           const session = e.session;
           if (e.originator !== "remote") return;
-          // One call at a time: a second caller hears busy, and the call
-          // still rings the extension's other phones.
-          if (sessionRef.current) {
+          // Busy while on a call: the caller still rings the extension's
+          // other phones.
+          if (sessions.current.main || sessions.current.second) {
             session.terminate({ status_code: 486, reason_phrase: "Busy Here" });
             return;
           }
           const number = session.remote_identity?.uri?.user ?? e.request.from?.uri?.user ?? "";
           const name = session.remote_identity?.display_name ?? e.request.from?.display_name ?? "";
+          sessions.current.main = session;
           track(session);
-          session.on("peerconnection", (p: { peerconnection: RTCPeerConnection }) => attachAudio(p.peerconnection));
-          setCall({ direction: "in", number, name: name && name !== number ? name : "", state: "ringing", startedAt: null, muted: false, held: false, endedReason: "" });
+          session.on("peerconnection", (p: { peerconnection: RTCPeerConnection }) => attachAudio(session, p.peerconnection));
+          update("main", { direction: "in", number, name: name && name !== number ? name : "", state: "ringing", startedAt: null, muted: false, held: false, endedReason: "" });
           setOpen(true);
           tones().ring();
           // A saved contact's name, when the caller ID didn't carry one.
           void loadDirectory().then((list) => {
             const who = whoHas(list, number);
-            if (who) setCall((c) => (c && c.number === number && !c.name ? { ...c, name: who.name } : c));
+            if (who) update("main", (c) => (c && c.number === number && !c.name ? { ...c, name: who.name } : c));
           });
           if (document.hidden && "Notification" in window && Notification.permission === "granted") {
             const note = new Notification("Incoming call", { body: name || formatPhone(number) || number, tag: "portal-call" });
@@ -346,91 +433,222 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
 
     const leave = () => { try { ua?.stop(); } catch { /* closing anyway */ } };
     window.addEventListener("pagehide", leave);
+    const live = sessions.current;
     return () => {
       cancelled = true;
       window.removeEventListener("pagehide", leave);
       tonesRef.current?.stop();
-      try { sessionRef.current?.terminate(); } catch { /* already over */ }
+      for (const s of [live.second, live.main]) { try { s?.terminate(); } catch { /* already over */ } }
       leave();
       uaRef.current = null;
     };
-  }, [enabled, attempt, track, attachAudio, loadDirectory, loadRecents]);
+  }, [enabled, attempt, track, attachAudio, loadDirectory, loadRecents, update]);
 
   // Leaving the page mid-call drops it; ask first.
   useEffect(() => {
-    if (!call || call.state === "ended") return;
+    if ((!call || call.state === "ended") && !second) return;
     const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [call]);
+  }, [call, second]);
 
-  const dial = useCallback((raw: string, name = "") => {
-    setOpen(true);
+  /** Places a call on a line. */
+  const place = useCallback((line: Line, raw: string, name: string) => {
     const ua = uaRef.current;
     const number = dialable(raw);
-    if (!ua || !number || sessionRef.current) return;
-    if (status !== "ready") return;
-    if (clearTimer.current) clearTimeout(clearTimer.current);
-    // Asked here, on a click, where browsers allow it: it's what lets an
-    // incoming call announce itself while the portal is in another tab.
-    if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission();
+    if (!ua || !number || sessions.current[line]) return false;
     const known = name || (directory ? whoHas(directory, number)?.name ?? "" : "");
-    setCall({ direction: "out", number, name: known, state: "dialing", startedAt: null, muted: false, held: false, endedReason: "" });
+    update(line, { direction: "out", number, name: known, state: "dialing", startedAt: null, muted: false, held: false, endedReason: "" });
     try {
       const session = ua.call(`sip:${number}@${domainRef.current}`, {
         mediaConstraints: { audio: true, video: false },
         pcConfig: { iceServers: ICE_SERVERS },
         rtcOfferConstraints: { offerToReceiveAudio: true, offerToReceiveVideo: false },
       });
+      sessions.current[line] = session;
       track(session);
-      attachAudio(session.connection as unknown as RTCPeerConnection);
+      attachAudio(session, session.connection as unknown as RTCPeerConnection);
+      return true;
     } catch (err) {
-      setCall((c) => (c ? { ...c, state: "ended", endedReason: err instanceof Error ? err.message : "Call failed" } : c));
+      update(line, (c) => (c ? { ...c, state: "ended", endedReason: err instanceof Error ? err.message : "Call failed" } : c));
+      if (line === "second") setTimeout(() => update("second", null), 2500);
+      return false;
     }
-  }, [status, track, attachAudio, directory]);
+  }, [directory, track, attachAudio, update]);
+
+  const dial = useCallback((raw: string, name = "") => {
+    setOpen(true);
+    if (status !== "ready" || sessions.current.main) return;
+    if (clearTimer.current) clearTimeout(clearTimer.current);
+    // Asked here, on a click, where browsers allow it: it's what lets an
+    // incoming call announce itself while the portal is in another tab.
+    if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission();
+    place("main", raw, name);
+  }, [status, place]);
+
+  /**
+   * A REFER, and the hang-up that follows it. RingLogix reports the
+   * transfer's progress with NOTIFYs; once the far side has it (or after a
+   * few seconds of silence, which some carriers leave us in) we drop out.
+   */
+  const refer = useCallback((from: RTCSession, target: string, opts: { replaces?: RTCSession; alsoEnd?: RTCSession } = {}) => {
+    say("Transferring…", 0);
+    let done = false;
+    const drop = () => {
+      if (done) return;
+      done = true;
+      transferred.current.add(from);
+      if (opts.alsoEnd) transferred.current.add(opts.alsoEnd);
+      say("Transferred");
+      for (const s of [opts.alsoEnd, from]) { try { s?.terminate(); } catch { /* already gone */ } }
+    };
+    const fail = (why: string) => {
+      if (done) return;
+      done = true;
+      say(why);
+      // Nothing happened: the caller is still on hold with us.
+      if (!opts.replaces && from.isOnHold().local) from.unhold();
+    };
+    try {
+      from.refer(target, {
+        ...(opts.replaces ? { replaces: opts.replaces } : {}),
+        eventHandlers: {
+          requestSucceeded: () => setTimeout(drop, 6000),
+          requestFailed: (e: { cause?: string; response?: { status_code?: number; getHeader?: (name: string) => string | undefined } }) => {
+            // RingLogix says why in a Warning header, e.g. 399 "Failed to
+            // find Target Session." (seen transferring a call to the auto
+            // attendant, 2026-11-24).
+            const why = /"([^"]+)"/.exec(e.response?.getHeader?.("Warning") ?? "")?.[1]?.replace(/\.$/, "");
+            console.warn("[phone] REFER refused", e.response?.status_code, why ?? e.cause);
+            fail(`Couldn't transfer: ${why ?? `RingLogix answered ${e.response?.status_code ?? e.cause ?? "nothing"}`}`);
+          },
+          accepted: drop,
+          failed: () => fail("The transfer didn't go through"),
+        },
+      } as never);
+    } catch {
+      fail("Couldn't transfer the call");
+    }
+  }, [say]);
+
+  /** Joins both calls: each side hears this browser's microphone and the other side. */
+  const merge = useCallback(async () => {
+    const a = sessions.current.main;
+    const b = sessions.current.second;
+    if (!a || !b || conf.current) return;
+    if (a.isOnHold().local) {
+      a.unhold();
+      // The re-INVITE that takes it off hold has to land before the mix.
+      await new Promise((r) => setTimeout(r, 700));
+    }
+    const pcA = a.connection as unknown as RTCPeerConnection;
+    const pcB = b.connection as unknown as RTCPeerConnection;
+    const sender = (pc: RTCPeerConnection) => pc.getSenders().find((s) => s.track?.kind === "audio");
+    const remote = (pc: RTCPeerConnection) => pc.getReceivers().map((r) => r.track).find((t) => t?.kind === "audio");
+    const sA = sender(pcA), sB = sender(pcB);
+    const micA = sA?.track, micB = sB?.track;
+    const remA = remote(pcA), remB = remote(pcB);
+    if (!sA || !sB || !micA || !micB || !remA || !remB) { say("Couldn't join the calls"); return; }
+    const ctx = new AudioContext();
+    const mix = (mic: MediaStreamTrack, other: MediaStreamTrack) => {
+      const out = ctx.createMediaStreamDestination();
+      ctx.createMediaStreamSource(new MediaStream([mic])).connect(out);
+      ctx.createMediaStreamSource(new MediaStream([other])).connect(out);
+      return out.stream.getAudioTracks()[0];
+    };
+    await sA.replaceTrack(mix(micA, remB));
+    await sB.replaceTrack(mix(micB, remA));
+    conf.current = {
+      mics: [micA, micB],
+      restore: () => {
+        void sA.replaceTrack(micA).catch(() => {});
+        void sB.replaceTrack(micB).catch(() => {});
+        void ctx.close();
+      },
+    };
+    setConference(true);
+    say("Calls merged");
+  }, [say]);
 
   const api = useMemo<PhoneApi>(() => ({
     // Derived rather than reset in an effect: signed out means off.
     status: enabled ? status : "off",
-    extension, error, call, open, setOpen, dial,
+    extension, error, call, open, setOpen, dial, second, conference, notice,
     answer: () => {
-      const s = sessionRef.current;
+      const s = sessions.current.main;
       if (!s || s.direction !== "incoming") return;
       tones().stop();
       s.answer({ mediaConstraints: { audio: true, video: false }, pcConfig: { iceServers: ICE_SERVERS } });
     },
     decline: () => {
       tones().stop();
-      try { sessionRef.current?.terminate({ status_code: 486, reason_phrase: "Busy Here" }); } catch { /* gone */ }
+      try { sessions.current.main?.terminate({ status_code: 486, reason_phrase: "Busy Here" }); } catch { /* gone */ }
     },
     hangup: () => {
       tones().stop();
-      try { sessionRef.current?.terminate(); } catch { /* gone */ }
+      // Everyone: the main call, and the second one if there is one.
+      const { main, second: other } = sessions.current;
+      if (other) transferred.current.delete(other);
+      for (const s of [other, main]) { try { s?.terminate(); } catch { /* gone */ } }
+    },
+    endSecond: () => {
+      try { sessions.current.second?.terminate(); } catch { /* gone */ }
+    },
+    endMain: () => {
+      try { sessions.current.main?.terminate(); } catch { /* gone */ }
     },
     toggleMute: () => {
-      const s = sessionRef.current;
+      if (conf.current) {
+        // In a conference the senders carry the mix; muting means silencing
+        // the microphone that feeds it.
+        const muted = conf.current.mics[0]?.enabled === false;
+        for (const m of conf.current.mics) m.enabled = muted;
+        update("main", (c) => (c ? { ...c, muted: !muted } : c));
+        update("second", (c) => (c ? { ...c, muted: !muted } : c));
+        return;
+      }
+      const s = sessions.current.second ?? sessions.current.main;
       if (!s) return;
       if (s.isMuted().audio) s.unmute({ audio: true }); else s.mute({ audio: true });
     },
     toggleHold: () => {
-      const s = sessionRef.current;
-      if (!s) return;
+      const s = sessions.current.main;
+      if (!s || sessions.current.second) return;
       if (s.isOnHold().local) s.unhold(); else s.hold();
     },
     sendTone: (tone: string) => {
-      try { sessionRef.current?.sendDTMF(tone, { transportType: "RFC2833" } as never); } catch { /* not in a call */ }
+      const s = conf.current ? sessions.current.main : sessions.current.second ?? sessions.current.main;
+      try { s?.sendDTMF(tone, { transportType: "RFC2833" } as never); } catch { /* not in a call */ }
     },
+    transfer: (raw: string) => {
+      const s = sessions.current.main;
+      const number = dialable(raw);
+      if (!s || !number) return;
+      refer(s, `sip:${number}@${domainRef.current}`);
+    },
+    consult: (raw: string, name = "") => {
+      const s = sessions.current.main;
+      if (!s || sessions.current.second) return;
+      if (!s.isOnHold().local) s.hold();
+      place("second", raw, name);
+    },
+    completeTransfer: () => {
+      const { main, second: other } = sessions.current;
+      if (!main || !other) return;
+      endConference();
+      refer(main, other.remote_identity.uri.toString(), { replaces: other, alsoEnd: other });
+    },
+    merge: () => { void merge(); },
     retry: () => { setError(""); setAttempt((a) => a + 1); },
     directory,
     loadDirectory: (refresh?: boolean) => { void loadDirectory(refresh); },
     recents,
     loadRecents,
-  }), [enabled, status, extension, error, call, open, dial, directory, loadDirectory, recents, loadRecents]);
+  }), [enabled, status, extension, error, call, second, conference, notice, open, dial, directory, loadDirectory, recents, loadRecents, place, refer, merge, endConference, update]);
 
   return (
     <PhoneContext.Provider value={api}>
       {children}
-      <audio ref={audioRef} autoPlay hidden />
     </PhoneContext.Provider>
   );
 }

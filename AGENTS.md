@@ -90,6 +90,24 @@ with **Reseller** scope, plus a separate API application. Hard-won facts:
   silently drops every reply carrying it. `lib/phone/sip-client.ts` patches
   `Grammar.parse` to retry with a placeholder host and restore the number.
   Don't "upgrade" around it without re-testing a REGISTER.
+- **Call recordings and transcripts** (`lib/call-intel.ts`): every call on
+  the domain is recorded (`*@277215`) and most are transcribed by RingLogix
+  itself; v1 `cdr2` names the job (`transcription_job_id`) but not the SIP
+  call-id both are filed under. Re-read the call from v2 with
+  `/domains/{d}/cdrs?id=<cdr_id>` (the `/cdrs/{id}` path form ignores the id
+  and returns the newest call). Recording: `/domains/{d}/recordings/<orig
+  call-id>` → `file-access-url`, a signed link that opens without a login,
+  so it only goes through `/api/calls/[id]/recording`. Transcript:
+  `/domains/{d}/transcriptions?id=<job>&date=YYYYMM&callid=<orig>` →
+  `call-intelligence-segments`. RingLogix's own summary isn't enabled here
+  ("transcription,sentiment"), so Claude writes one (`ANTHROPIC_API_KEY`),
+  cached in `call_summaries`. Verified 2026-11-24.
+- **Transfers** are SIP REFER from the browser (blind: `refer(target)`;
+  warm: REFER with Replaces after a consult call). A REFER on a call to the
+  auto attendant (801) to our own extension was refused 400 with Warning
+  `"Failed to find Target Session."` - test transfers with a real person on
+  the line. Conferences are mixed in the browser (each leg is sent the mic
+  plus the other leg's audio) and verified with two auto attendants.
 - Which extension a person calls as lives in `phone_extensions`, admin-set
   in Edit Profile. Never on `employees.data`: any signed-in user can write
   that row, and the value decides whose SIP password the browser gets.

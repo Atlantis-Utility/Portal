@@ -37,6 +37,7 @@ projects, inventory, vault and UniFi along with it.
    - `supabase/migration-conversation-access.sql`
    - `supabase/migration-google-contacts.sql`
    - `supabase/migration-phone.sql`
+   - `supabase/migration-call-summaries.sql`
 5. `npm run dev`
 
 ## Integrations
@@ -78,6 +79,15 @@ desk phone and SNAPmobile; mute, hold and keypad during a call. Numbers in Messa
   `<ext>pt` is created on that extension in RingLogix for the browser.
 - Calls ring in the browser only while a portal tab is open, and need the
   microphone allowed. Calls go out with the extension's own caller ID.
+- During a call: **Transfer** (straight away, or "talk to them first" with
+  the caller on hold, then complete) and **Add call** (a second call, then
+  **Merge** into a three-way conference mixed in the browser).
+- **Recordings, transcripts and summaries**: a connected call in the Inbox
+  (or the phone's Recents) opens to its RingLogix recording and transcript.
+  The summary and next steps are written by Claude from the transcript
+  when `ANTHROPIC_API_KEY` is set, once per call (kept in `call_summaries`).
+  California is an all-party-consent state: callers should hear that calls
+  are recorded.
 - `RINGLOGIX_WSS` (optional, comma-separated) overrides the WebSocket
   servers; the default is RingLogix's mia, dfw and sjc cores on port 9002.
 

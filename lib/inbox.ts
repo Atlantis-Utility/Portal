@@ -122,6 +122,20 @@ export async function loadVoicemails(domain: string): Promise<Voicemail[]> {
   return rows.map((r) => toVoicemail(r, domain)).sort((a, b) => b.at - a.at);
 }
 
+/** One extension's box: one request, for the portal phone. */
+export async function loadVoicemailsFor(domain: string, user: string): Promise<Voicemail[]> {
+  const rows = ((await withRetry(() => getUcConversations(domain, user))) ?? []) as RawVoicemail[];
+  return rows
+    .filter((r) => r.conversation_type === "vmail" && r.index)
+    .map((r) => toVoicemail({ ...r, user }, domain))
+    .sort((a, b) => b.at - a.at);
+}
+
+/** Whether a call involved this extension, whichever way it went. */
+export function callInvolves(c: CallRecord, extension: string): boolean {
+  return c.fromExtension === extension || c.toExtension === extension;
+}
+
 /**
  * The recording's address, for the audio proxy only. It works without any
  * login at all, so it never goes to the browser.

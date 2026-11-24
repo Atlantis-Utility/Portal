@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { UA } from "jssip/lib/UA";
 import type { RTCSession } from "jssip/lib/RTCSession";
 import { dialable, loadJsSIP } from "@/lib/phone/sip-client";
+import { whoHas, type DirectoryEntry, type Recents } from "@/lib/phone/types";
 import { formatPhone } from "@/lib/utils";
 
 /**
@@ -58,6 +59,12 @@ interface PhoneApi {
   toggleHold: () => void;
   sendTone: (tone: string) => void;
   retry: () => void;
+  /** Contacts and colleagues to call; null until first asked for. */
+  directory: DirectoryEntry[] | null;
+  loadDirectory: (refresh?: boolean) => void;
+  /** Your extension's calls and voicemail; null until first asked for. */
+  recents: Recents | null;
+  loadRecents: () => void;
 }
 
 const PhoneContext = createContext<PhoneApi | null>(null);
@@ -145,6 +152,39 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
   const [call, setCall] = useState<CallInfo | null>(null);
   const [open, setOpen] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [directory, setDirectory] = useState<DirectoryEntry[] | null>(null);
+  const directoryRef = useRef<Promise<DirectoryEntry[]> | null>(null);
+  const [recents, setRecents] = useState<Recents | null>(null);
+  const recentsBusy = useRef(false);
+  const recentsWanted = useRef(false);
+
+  const loadRecents = useCallback(() => {
+    recentsWanted.current = true;
+    if (recentsBusy.current) return;
+    recentsBusy.current = true;
+    fetch("/api/phone/recents", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b: Recents | null) => { if (b) setRecents({ ...b, loadedAt: Date.now() }); })
+      .catch(() => { /* keeps what it had */ })
+      .finally(() => { recentsBusy.current = false; });
+  }, []);
+
+  /** Fetched once, when first needed: it reads every contact book. */
+  const loadDirectory = useCallback((refresh = false): Promise<DirectoryEntry[]> => {
+    if (directoryRef.current && !refresh) return directoryRef.current;
+    directoryRef.current = fetch("/api/phone/directory", { cache: refresh ? "no-store" : "default" })
+      .then((r) => (r.ok ? r.json() : { entries: [] }))
+      .then((b: { entries?: DirectoryEntry[] }) => {
+        const list = b.entries ?? [];
+        setDirectory(list);
+        return list;
+      })
+      .catch(() => {
+        directoryRef.current = null;
+        return [];
+      });
+    return directoryRef.current;
+  }, []);
 
   const uaRef = useRef<UA | null>(null);
   const sessionRef = useRef<RTCSession | null>(null);
@@ -204,10 +244,12 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
       setCall((c) => (c ? { ...c, state: "ended", endedReason: reason } : c));
       if (clearTimer.current) clearTimeout(clearTimer.current);
       clearTimer.current = setTimeout(() => setCall((c) => (c?.state === "ended" ? null : c)), 2500);
+      // The call record reaches RingLogix's history a few seconds after.
+      if (recentsWanted.current) setTimeout(loadRecents, 5000);
     };
     session.on("ended", finish);
     session.on("failed", finish);
-  }, [patchCall]);
+  }, [patchCall, loadRecents]);
 
   // Signs this browser in to RingLogix (and out again on the way out).
   useEffect(() => {
@@ -248,7 +290,13 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
         });
         uaRef.current = ua;
 
-        ua.on("registered", () => { setStatus("ready"); setError(""); });
+        let first = true;
+        ua.on("registered", () => {
+          setStatus("ready");
+          setError("");
+          // Once, for the missed-call badge on the corner button.
+          if (first) { first = false; loadRecents(); }
+        });
         ua.on("unregistered", () => setStatus((s) => (s === "error" ? s : "connecting")));
         ua.on("disconnected", () => setStatus((s) => (s === "error" ? s : "connecting")));
         ua.on("registrationFailed", (e: { cause?: string; response?: { status_code?: number } }) => {
@@ -275,6 +323,11 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
           setCall({ direction: "in", number, name: name && name !== number ? name : "", state: "ringing", startedAt: null, muted: false, held: false, endedReason: "" });
           setOpen(true);
           tones().ring();
+          // A saved contact's name, when the caller ID didn't carry one.
+          void loadDirectory().then((list) => {
+            const who = whoHas(list, number);
+            if (who) setCall((c) => (c && c.number === number && !c.name ? { ...c, name: who.name } : c));
+          });
           if (document.hidden && "Notification" in window && Notification.permission === "granted") {
             const note = new Notification("Incoming call", { body: name || formatPhone(number) || number, tag: "portal-call" });
             note.onclick = () => { window.focus(); note.close(); };
@@ -301,7 +354,7 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
       leave();
       uaRef.current = null;
     };
-  }, [enabled, attempt, track, attachAudio]);
+  }, [enabled, attempt, track, attachAudio, loadDirectory, loadRecents]);
 
   // Leaving the page mid-call drops it; ask first.
   useEffect(() => {
@@ -321,7 +374,8 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
     // Asked here, on a click, where browsers allow it: it's what lets an
     // incoming call announce itself while the portal is in another tab.
     if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission();
-    setCall({ direction: "out", number, name, state: "dialing", startedAt: null, muted: false, held: false, endedReason: "" });
+    const known = name || (directory ? whoHas(directory, number)?.name ?? "" : "");
+    setCall({ direction: "out", number, name: known, state: "dialing", startedAt: null, muted: false, held: false, endedReason: "" });
     try {
       const session = ua.call(`sip:${number}@${domainRef.current}`, {
         mediaConstraints: { audio: true, video: false },
@@ -333,7 +387,7 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
     } catch (err) {
       setCall((c) => (c ? { ...c, state: "ended", endedReason: err instanceof Error ? err.message : "Call failed" } : c));
     }
-  }, [status, track, attachAudio]);
+  }, [status, track, attachAudio, directory]);
 
   const api = useMemo<PhoneApi>(() => ({
     // Derived rather than reset in an effect: signed out means off.
@@ -367,7 +421,11 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
       try { sessionRef.current?.sendDTMF(tone, { transportType: "RFC2833" } as never); } catch { /* not in a call */ }
     },
     retry: () => { setError(""); setAttempt((a) => a + 1); },
-  }), [enabled, status, extension, error, call, open, dial]);
+    directory,
+    loadDirectory: (refresh?: boolean) => { void loadDirectory(refresh); },
+    recents,
+    loadRecents,
+  }), [enabled, status, extension, error, call, open, dial, directory, loadDirectory, recents, loadRecents]);
 
   return (
     <PhoneContext.Provider value={api}>

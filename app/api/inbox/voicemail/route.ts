@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { tenantDomain } from "@/lib/tenancy";
-import { ApiAuthError, requirePageAccess } from "@/lib/api-auth";
+import { ApiAuthError, requireEmployee, requirePageAccess } from "@/lib/api-auth";
+import { extensionFor } from "@/lib/phone";
 import { isConfigured, ringlogixAuthHeader } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
 import { voicemailAudioUrl } from "@/lib/inbox";
@@ -20,10 +21,18 @@ const ALLOWED_HOST = /(^|\.)ringlogix\.com$/i;
  */
 export async function GET(req: NextRequest) {
   try {
-    await requirePageAccess("/inbox");
-    if (!isConfigured()) return NextResponse.json({ error: "RingLogix isn't configured" }, { status: 503 });
     const user = (req.nextUrl.searchParams.get("user") ?? "").trim();
     const id = (req.nextUrl.searchParams.get("id") ?? "").trim();
+    // The Inbox page reads every box. Without it, the portal phone still
+    // plays the person's own: their extension's box and nobody else's.
+    try {
+      await requirePageAccess("/inbox");
+    } catch (err) {
+      if (!(err instanceof ApiAuthError) || err.status !== 403) throw err;
+      const actor = await requireEmployee();
+      if (!user || (await extensionFor(actor.email)) !== user) throw err;
+    }
+    if (!isConfigured()) return NextResponse.json({ error: "RingLogix isn't configured" }, { status: 503 });
     if (!user || !id) return NextResponse.json({ error: "Which voicemail?" }, { status: 400 });
 
     const address = await voicemailAudioUrl(await tenantDomain(), user, id);

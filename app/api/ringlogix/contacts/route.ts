@@ -1,7 +1,8 @@
 import { tenantDomain } from "@/lib/tenancy";
 import { NextRequest, NextResponse } from "next/server";
-import { getContacts, getSubscribers, createContact, deleteContact, isConfigured, invalidateRinglogixCache } from "@/lib/ringlogix";
+import { getContacts, createContact, deleteContact, isConfigured, invalidateRinglogixCache } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
+import { readAllBooks } from "@/lib/contact-books";
 import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
 
 /**
@@ -29,26 +30,7 @@ export async function GET(req: NextRequest) {
     // contact saved from a conversation lands in that conversation's
     // extension, so a one-book view kept missing them.
     if (!user || user === "all") {
-      const subscribers = (await getSubscribers(domain).catch(() => [])) as Array<{ user?: string }>;
-      const users = ["*", ...new Set(subscribers.map((s) => (s.user ?? "").trim()).filter(Boolean))];
-      const books: Array<Array<Record<string, string>>> = [];
-      for (let i = 0; i < users.length; i += 6) {
-        books.push(...(await Promise.all(
-          users.slice(i, i + 6).map((u) =>
-            (getContacts(domain, u) as Promise<Array<Record<string, string>>>)
-              .then((rows) => (rows ?? []).map((r) => ({ ...r, user: r.user || u })))
-              .catch(() => []),
-          ),
-        )));
-      }
-      const seen = new Set<string>();
-      const all = books.flat().filter((c) => {
-        const key = `${c.user}|${c.contact_id ?? `${c.first_name}|${c.last_name}|${c.cell_phone}`}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-      return NextResponse.json(all);
+      return NextResponse.json(await readAllBooks(domain));
     }
     const data = await getContacts(domain, user, {
       first_name: p.get("first_name") ?? undefined,

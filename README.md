@@ -64,9 +64,12 @@ integration.
 ## Phone (calling from the portal)
 
 A phone button sits in the corner of every page for anyone with an
-extension: a dialpad, an incoming-call card (it rings along with that
-extension's desk phone and SNAPmobile), and mute, hold and keypad during a
-call. Numbers in Messages, Inbox and Contacts dial through it. Code is in
+extension, laid out like a mobile's phone app: **Recents** (that
+extension's calls over 14 days, missed ones counted on the button),
+**Contacts** (every RingLogix book plus colleagues by extension),
+**Keypad** (suggests a contact as you type) and **Voicemail** (that
+extension's box, playable in place). Incoming calls ring along with the
+desk phone and SNAPmobile; mute, hold and keypad during a call. Numbers in Messages, Inbox and Contacts dial through it. Code is in
 `components/phone/` and `lib/phone.ts`.
 
 - An administrator sets each person's extension in **Edit Profile → Phone**.

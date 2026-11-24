@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Select from "@/components/ui/Select";
 import { TagChips } from "@/components/ui/TagPicker";
 import { MESSAGE_TAGS, TAG_BY_KEY } from "@/lib/message-tags";
+import { reconcileConversationTasks } from "@/lib/conversation-tasks";
 import Link from "next/link";
 import Header from "@/components/layout/Header";
 import AddTaskDrawer, { type KanbanCard, type KanbanColumn } from "@/components/tasks/AddTaskDrawer";
@@ -53,6 +54,15 @@ export default function TasksPage() {
   const [tag, setTag] = useState("");
   const [adding, setAdding] = useState<KanbanColumn | null>(null);
   const [open, setOpen] = useState<KanbanCard | null>(null);
+
+  // Tagged conversations onto the board (and stale ones off), once a visit.
+  const reconciled = useRef(false);
+  useEffect(() => {
+    if (reconciled.current || !authUser) return;
+    reconciled.current = true;
+    reconcileConversationTasks({ name: authUser.displayName || authUser.email || "", employeeId: authUser.accessEmployeeId })
+      .catch((e) => console.warn("[tasks] couldn't sync tagged conversations", e));
+  }, [authUser]);
 
   useEffect(() => {
     const unsubscribe = subscribeTasks((next) => {

@@ -44,6 +44,8 @@ export interface CallRecord {
   toNumber: string;
   /** Our extension on the call, when there was one. */
   toExtension: string;
+  /** RingLogix transcribed it (so it was recorded): details at /api/calls/[id]. */
+  transcribed: boolean;
 }
 
 /** A raw UC Inbox voicemail row; only what's read here. */
@@ -161,6 +163,7 @@ interface RawCall {
   time_start?: string | number;
   time_answer?: string | number | null;
   time_talking?: string | number | null;
+  transcription_job_id?: string | number | null;
 }
 
 /** "sip:18055551234@192.92.8.30" -> "18055551234". */
@@ -190,6 +193,7 @@ function toCall(r: RawCall): CallRecord | null {
     fromExtension: direction === "in" ? "" : (r.orig_sub ?? "").trim(),
     toNumber: direction === "internal" ? "" : digitsOf(r.orig_to_user ?? ""),
     toExtension: direction === "out" ? "" : (r.term_sub ?? r.orig_to_user ?? "").trim(),
+    transcribed: Boolean(r.transcription_job_id),
   };
 }
 

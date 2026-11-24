@@ -4,10 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Voicemail as VoicemailIcon, PhoneIncoming, PhoneOutgoing, PhoneMissed, Phone, MessageSquare,
-  RefreshCw, AlertCircle, Search, ChevronDown, ArrowUpRight, Download, Inbox,
+  RefreshCw, AlertCircle, Search, ChevronDown, ArrowUpRight, Download, Inbox, Sparkles,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import CallLink from "@/components/phone/CallLink";
+import CallDetailPanel from "@/components/calls/CallDetailPanel";
 import Select from "@/components/ui/Select";
 import { colourFor, initialsFor } from "@/components/messages/Avatar";
 import { usePolling } from "@/lib/use-polling";
@@ -432,31 +433,57 @@ function Row({
     const number = c.direction === "in" ? c.fromNumber : c.direction === "out" ? c.toNumber : "";
     const thread = number ? threadFor.get(number.slice(-10)) : undefined;
     const showNumber = number && c.direction !== "internal" && person(number) !== formatPhone(number);
+    // A call that connected has a recording (every call on the domain is
+    // recorded) and usually a transcript: those open like a voicemail.
+    const expandable = c.answered && c.talkSec > 0;
     return (
-      <li className={`${rowBase} hover:bg-surface-3 transition-colors`}>
-        <Badged
-          name={who}
-          Icon={Icon}
-          tone={missed ? "bg-tint-rose text-ink-rose" : c.direction === "out" ? "bg-tint-green text-ink-green" : "bg-tint-slate text-ink-slate"}
-        />
-        <span className="min-w-0 flex-1">
-          <span className={`block text-sm truncate font-medium ${missed ? "text-ink-rose" : "text-fg"}`}>{who}</span>
-          <span className="block text-[13px] text-fg-muted truncate mt-0.5">
-            {detail}
-            {c.talkSec && c.answered ? ` · ${duration(c.talkSec)}` : ""}
-            {showNumber ? ` · ${formatPhone(number)}` : ""}
+      <li className={open ? "bg-surface-3" : ""}>
+        <div className={`${rowBase} hover:bg-surface-3 transition-colors`}>
+          <button
+            type="button"
+            onClick={expandable ? onToggle : undefined}
+            className={`flex items-center gap-3.5 min-w-0 flex-1 text-left ${expandable ? "cursor-pointer" : "cursor-default"}`}
+          >
+            <Badged
+              name={who}
+              Icon={Icon}
+              tone={missed ? "bg-tint-rose text-ink-rose" : c.direction === "out" ? "bg-tint-green text-ink-green" : "bg-tint-slate text-ink-slate"}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-2">
+                <span className={`text-sm truncate font-medium ${missed ? "text-ink-rose" : "text-fg"}`}>{who}</span>
+                {c.transcribed && expandable && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-tint-violet text-ink-violet shrink-0">
+                    <Sparkles className="w-2.5 h-2.5" /> Transcript
+                  </span>
+                )}
+              </span>
+              <span className="block text-[13px] text-fg-muted truncate mt-0.5">
+                {detail}
+                {c.talkSec && c.answered ? ` · ${duration(c.talkSec)}` : ""}
+                {showNumber ? ` · ${formatPhone(number)}` : ""}
+              </span>
+            </span>
+          </button>
+          {extLabel && <span className="hidden md:inline-flex"><span className={chip}>{extLabel}</span></span>}
+          <span className="flex items-center gap-0.5 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+            {number && c.direction !== "internal" && (
+              <CallLink number={number} name={who} className={actionBtn} tip="Call back"><Phone className="w-4 h-4" /></CallLink>
+            )}
+            {thread && (
+              <Link href={`/messages?session=${encodeURIComponent(thread)}`} className={actionBtn} data-tip="Open texts"><MessageSquare className="w-4 h-4" /></Link>
+            )}
           </span>
-        </span>
-        {extLabel && <span className="hidden md:inline-flex"><span className={chip}>{extLabel}</span></span>}
-        <span className="flex items-center gap-0.5 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-          {number && c.direction !== "internal" && (
-            <CallLink number={number} name={who} className={actionBtn} tip="Call back"><Phone className="w-4 h-4" /></CallLink>
-          )}
-          {thread && (
-            <Link href={`/messages?session=${encodeURIComponent(thread)}`} className={actionBtn} data-tip="Open texts"><MessageSquare className="w-4 h-4" /></Link>
-          )}
-        </span>
-        <span className="w-16 text-right text-xs text-fg-subtle shrink-0 tabular-nums">{clock(item.at)}</span>
+          <span className="w-16 text-right text-xs text-fg-subtle shrink-0 tabular-nums">{clock(item.at)}</span>
+          {expandable
+            ? <button type="button" onClick={onToggle} aria-label={open ? "Hide call details" : "Show recording and transcript"} className="shrink-0"><ChevronDown className={`w-4 h-4 text-fg-subtle transition-transform ${open ? "rotate-180" : ""}`} /></button>
+            : <span className="w-4 shrink-0" />}
+        </div>
+        {open && expandable && (
+          <div className="pl-[4.75rem] pr-5 pb-4">
+            <CallDetailPanel id={c.id} />
+          </div>
+        )}
       </li>
     );
   }

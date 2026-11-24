@@ -443,7 +443,7 @@ export interface PbxDevice {
  * string; the same URL with `?…` attached answers 200 (seen 2026-11-24 on
  * both reading and creating a device). So a harmless one is always added.
  */
-async function coreApi(method: "GET" | "POST", path: string, body?: unknown): Promise<{ status: number; data: unknown }> {
+export async function coreApi(method: "GET" | "POST", path: string, body?: unknown): Promise<{ status: number; data: unknown }> {
   if (!isConfigured()) throw new Error("RINGLOGIX_NOT_CONFIGURED");
   const { token, type } = await getToken();
   const url = RINGLOGIX_CORE_BASE + path + (path.includes("?") ? "&" : "?") + "client=portal";

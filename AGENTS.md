@@ -68,6 +68,31 @@ with **Reseller** scope, plus a separate API application. Hard-won facts:
   `TimeZone: US/Pacific` (checked against the call record). A recording's
   `remotepath` opens **without any login**, so it only ever goes through
   `/api/inbox/voicemail`, never to the browser.
+- **Google Contacts sync** (`lib/google-contacts.ts`) writes into a
+  person's own extension book with `contact/create`, so the by-name rule
+  above is the whole design: the sync records on each `google_contacts` row
+  which RingLogix name it wrote (`rl_*`) and touches nothing else; a
+  same-name contact already there is a *clash*, left alone. Never "fix" a
+  clash by overwriting. Batch upserts there send whole rows: supabase-js
+  sets any column a row leaves out to null.
+- **The portal phone** (`lib/phone.ts`, `components/phone/`) is WebRTC
+  straight to RingLogix: SIP over WebSocket at
+  `wss://core2-mia.ringlogix.com:9002` (dfw and sjc answer too; 443 does
+  not). The browser registers as its own device `<ext>pt` on the person's
+  extension, auth user = the device name, password =
+  `device-sip-registration-password` from v2
+  `GET /domains/{d}/users/{u}/devices/{device}`; `POST …/devices` creates
+  one and RingLogix picks the password. **Those v2 device paths answer 404
+  unless the URL has a query string** (same URL plus `?x=1` → 200; verified
+  2026-11-24), so `coreApi` always adds one.
+- **JsSIP can't parse our numeric domain** (`sip:102pt@277215`): its grammar
+  wants a host that starts with a letter, refuses the URI in config, and
+  silently drops every reply carrying it. `lib/phone/sip-client.ts` patches
+  `Grammar.parse` to retry with a placeholder host and restore the number.
+  Don't "upgrade" around it without re-testing a REGISTER.
+- Which extension a person calls as lives in `phone_extensions`, admin-set
+  in Edit Profile. Never on `employees.data`: any signed-in user can write
+  that row, and the value decides whose SIP password the browser gets.
 - Still refused: `domain/read`, `reseller/read`, and there is no webhook,
   so Messages polls.
 

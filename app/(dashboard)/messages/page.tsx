@@ -17,6 +17,7 @@ import {
 } from "@/lib/db/message-threads";
 import { MESSAGE_TAGS, knownTags } from "@/lib/message-tags";
 import Avatar from "@/components/messages/Avatar";
+import CallLink from "@/components/phone/CallLink";
 import ScheduledMessages, { type SchedulePrefill } from "@/components/messages/ScheduledMessages";
 import AccessSection from "@/components/messages/AccessSection";
 import { SCHEDULE_OPTION } from "@/lib/workflows/types";
@@ -986,13 +987,13 @@ function Details({
 
         <div className="flex items-center gap-1.5 mt-3.5">
           {conversation.remote && (
-            <a
-              href={`tel:+${conversation.remote}`}
-              data-tip="Call this number"
+            <CallLink
+              number={conversation.remote}
+              name={displayName}
               className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#eff6ff] text-[#0070f3] text-[11px] font-semibold py-2 hover:bg-[#e0edff] transition-colors"
             >
               <Phone className="w-3.5 h-3.5" /> Call
-            </a>
+            </CallLink>
           )}
           {customerId && (
             <a
@@ -1015,19 +1016,19 @@ function Details({
                 // the number under it.
                 const who = contacts[n.slice(-10)]?.name;
                 return (
-                  <a key={n} href={`tel:+${n}`} className="flex flex-col items-end text-right hover:underline">
+                  <CallLink key={n} number={n} name={who ?? ""} className="flex flex-col items-end text-right hover:underline">
                     {who && <span className="text-[#0a0a0a] font-medium">{who}</span>}
                     <span className={`tabular-nums ${who ? "text-[11px] text-[#999]" : "text-[#0070f3]"}`}>{formatPhone(n) || n}</span>
-                  </a>
+                  </CallLink>
                 );
               })}
             </span>
           </Row>
         ) : conversation.remote ? (
           <Row label="Phone">
-            <a href={`tel:+${conversation.remote}`} className="text-[#0070f3] hover:underline tabular-nums">
+            <CallLink number={conversation.remote} name={displayName} className="text-[#0070f3] hover:underline tabular-nums">
               {formatPhone(conversation.remote) || conversation.remote}
-            </a>
+            </CallLink>
           </Row>
         ) : null}
         {contact?.company && <Row label="Company">{contact.company}</Row>}

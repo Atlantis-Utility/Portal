@@ -14,6 +14,7 @@ import { availableWidgets, defaultDashboardWidgets, isGrantOnly } from "@/lib/da
 import { Check, Lock, Mail } from "lucide-react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import SetPasswordPanel from "@/components/employees/SetPasswordPanel";
+import PhoneExtensionField from "@/components/employees/PhoneExtensionField";
 import { getErrorMessage } from "@/lib/utils";
 import { useToast } from "@/lib/toast";
 import { useAuth } from "@/lib/auth-context";
@@ -307,6 +308,13 @@ export default function EditEmployeeDrawer({ open, onClose, employee }: Props) {
               />
             </div>
           </div>
+        )}
+
+        {isAdmin && employee.email && (
+          <PhoneExtensionField
+            email={employee.email}
+            onDone={(message, ok) => (ok ? success(message) : notifyError(message))}
+          />
         )}
 
         <div className="border-t border-[#f7f7f7] pt-4">

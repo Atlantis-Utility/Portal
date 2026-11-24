@@ -6,6 +6,7 @@ import { usePolling } from "@/lib/use-polling";
 import { useConfirm } from "@/lib/confirm";
 import Overlay from "@/components/ui/Overlay";
 import Header from "@/components/layout/Header";
+import CallLink from "@/components/phone/CallLink";
 import ExportMenu from "@/components/ui/ExportMenu";
 import { BookUser, Mail, Smartphone, Phone, RefreshCw, AlertCircle, Plus, X, Trash2 } from "lucide-react";
 
@@ -328,9 +329,9 @@ export default function ContactsPage() {
                     </td>
                     <td className="px-4 py-3 text-xs text-[#666] whitespace-nowrap">{!c.user || c.user === "*" ? "Shared" : `Ext ${c.user}`}</td>
                     <td className="px-4 py-3 text-sm text-[#666]">{c.company || "-"}</td>
-                    <td className="px-4 py-3 text-sm text-[#666] font-mono">{c.work_phone ? formatPhone(c.work_phone) : "-"}</td>
-                    <td className="px-4 py-3 text-sm text-[#666] font-mono">{c.cell_phone ? formatPhone(c.cell_phone) : "-"}</td>
-                    <td className="px-4 py-3 text-sm text-[#666] font-mono">{c.home_phone ? formatPhone(c.home_phone) : "-"}</td>
+                    <td className="px-4 py-3 text-sm text-[#666] font-mono">{c.work_phone ? <CallLink number={c.work_phone} name={[c.first_name, c.last_name].filter(Boolean).join(" ")} className="hover:text-[#0070f3] hover:underline">{formatPhone(c.work_phone)}</CallLink> : "-"}</td>
+                    <td className="px-4 py-3 text-sm text-[#666] font-mono">{c.cell_phone ? <CallLink number={c.cell_phone} name={[c.first_name, c.last_name].filter(Boolean).join(" ")} className="hover:text-[#0070f3] hover:underline">{formatPhone(c.cell_phone)}</CallLink> : "-"}</td>
+                    <td className="px-4 py-3 text-sm text-[#666] font-mono">{c.home_phone ? <CallLink number={c.home_phone} name={[c.first_name, c.last_name].filter(Boolean).join(" ")} className="hover:text-[#0070f3] hover:underline">{formatPhone(c.home_phone)}</CallLink> : "-"}</td>
                     <td className="px-4 py-3 text-sm text-[#666]">{c.email || "-"}</td>
                     <td className="px-4 py-3">
                       {/* RingLogix stores tags as ",post,vip," - one chip each. */}

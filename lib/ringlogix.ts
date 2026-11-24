@@ -427,6 +427,62 @@ export async function sendMedia(opts: {
   invalidate("rl:message:");
 }
 
+/** A SIP device on an extension, as the v2 core reports it. */
+export interface PbxDevice {
+  device: string;
+  user: string;
+  domain: string;
+  "device-sip-registration-password"?: string;
+  "device-sip-registration-state"?: string;
+}
+
+/**
+ * The v2 core, for what the gateway can't do.
+ *
+ * The device paths answer 404, empty, unless the URL carries a query
+ * string; the same URL with `?…` attached answers 200 (seen 2026-11-24 on
+ * both reading and creating a device). So a harmless one is always added.
+ */
+async function coreApi(method: "GET" | "POST", path: string, body?: unknown): Promise<{ status: number; data: unknown }> {
+  if (!isConfigured()) throw new Error("RINGLOGIX_NOT_CONFIGURED");
+  const { token, type } = await getToken();
+  const url = RINGLOGIX_CORE_BASE + path + (path.includes("?") ? "&" : "?") + "client=portal";
+  const res = await fetch(url, {
+    method,
+    headers: { Authorization: `${type} ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+  });
+  const text = await res.text().catch(() => "");
+  let data: unknown = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  return { status: res.status, data };
+}
+
+/** One device, with its SIP password; null if there's no such device. */
+export async function getDevice(domain: string, user: string, device: string): Promise<PbxDevice | null> {
+  const { status, data } = await coreApi(
+    "GET",
+    `/domains/${encodeURIComponent(domain)}/users/${encodeURIComponent(user)}/devices/${encodeURIComponent(device)}`,
+  );
+  if (status === 404) return null;
+  if (status !== 200) throw new RingLogixError("device", "read", status, String((data as { message?: string })?.message ?? ""));
+  return data as PbxDevice;
+}
+
+/** Adds a device to an extension; RingLogix picks its SIP password. */
+export async function createDevice(domain: string, user: string, device: string): Promise<PbxDevice> {
+  const { status, data } = await coreApi(
+    "POST",
+    `/domains/${encodeURIComponent(domain)}/users/${encodeURIComponent(user)}/devices?synchronous=yes`,
+    { device, synchronous: "yes" },
+  );
+  if (status !== 200 && status !== 201) {
+    throw new RingLogixError("device", "create", status, String((data as { message?: string })?.message ?? ""));
+  }
+  return data as PbxDevice;
+}
+
 /**
  * Marks a conversation read or unread.
  *

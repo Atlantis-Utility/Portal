@@ -7,6 +7,7 @@ import {
   RefreshCw, AlertCircle, Search, ChevronDown, ArrowUpRight,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
+import CallLink from "@/components/phone/CallLink";
 import Select from "@/components/ui/Select";
 import { usePolling } from "@/lib/use-polling";
 import { formatPhone } from "@/lib/utils";
@@ -383,7 +384,12 @@ function Row({
         </span>
         <span className="text-[11px] text-[#999] shrink-0 flex flex-col items-end gap-1">
           {clock(item.at)}
-          {thread && <Link href={`/messages?session=${encodeURIComponent(thread)}`} className="text-[#0070f3] hover:underline">Text</Link>}
+          <span className="flex items-center gap-2">
+            {number && c.direction !== "internal" && (
+              <CallLink number={number} name={who} className="text-[#0070f3] hover:underline">Call</CallLink>
+            )}
+            {thread && <Link href={`/messages?session=${encodeURIComponent(thread)}`} className="text-[#0070f3] hover:underline">Text</Link>}
+          </span>
         </span>
       </li>
     );
@@ -419,6 +425,9 @@ function Row({
           <audio controls autoPlay preload="none" src={audio} className="w-full max-w-md h-9" />
           <div className="flex items-center gap-3 text-xs">
             <a href={audio} download className="text-[#0070f3] hover:underline">Download</a>
+            {v.fromNumber && !v.fromExtension && (
+              <CallLink number={v.fromNumber} name={who} className="text-[#0070f3] hover:underline">Call back</CallLink>
+            )}
             {thread && <Link href={`/messages?session=${encodeURIComponent(thread)}`} className="text-[#0070f3] hover:underline">Text them</Link>}
           </div>
         </div>

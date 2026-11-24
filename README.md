@@ -35,6 +35,8 @@ projects, inventory, vault and UniFi along with it.
    - `supabase/migration-integrations.sql`
    - `supabase/migration-staff-only.sql` (before any customer can sign in)
    - `supabase/migration-conversation-access.sql`
+   - `supabase/migration-google-contacts.sql`
+   - `supabase/migration-phone.sql`
 5. `npm run dev`
 
 ## Integrations
@@ -58,6 +60,54 @@ at its own interval (15 minutes at the shortest).
 `INTEGRATIONS_KEY` (64 hex characters) encrypts saved credentials. It must
 be set in every deployment, and changing it means reconnecting each
 integration.
+
+## Phone (calling from the portal)
+
+A phone button sits in the corner of every page for anyone with an
+extension: a dialpad, an incoming-call card (it rings along with that
+extension's desk phone and SNAPmobile), and mute, hold and keypad during a
+call. Numbers in Messages, Inbox and Contacts dial through it. Code is in
+`components/phone/` and `lib/phone.ts`.
+
+- An administrator sets each person's extension in **Edit Profile → Phone**.
+  Without one, nothing changes for them (numbers stay plain `tel:` links).
+- The first time someone opens the portal with an extension, a SIP device
+  `<ext>pt` is created on that extension in RingLogix for the browser.
+- Calls ring in the browser only while a portal tab is open, and need the
+  microphone allowed. Calls go out with the extension's own caller ID.
+- `RINGLOGIX_WSS` (optional, comma-separated) overrides the WebSocket
+  servers; the default is RingLogix's mia, dfw and sjc cores on port 9002.
+
+## Google Contacts sync
+
+On the Account page anyone can **Connect Google**: they pick their
+extension, sign in with Google (contacts read-only), and the contacts saved
+in that Google account are copied into their extension's RingLogix contact
+book, then kept current. Code is `lib/google-contacts.ts`.
+
+- The minute timer asks Google what changed every 5 minutes (a sync token,
+  so it's one cheap call) and writes at most 60 RingLogix changes per person
+  per minute; a big first sync takes a few minutes.
+- It only ever updates or deletes contacts **it** added. A Google contact
+  whose name is already in that book (RingLogix keeps one per name) is left
+  out and listed on the card instead.
+- Deleting a contact in Google deletes its copy. Disconnecting asks whether
+  to keep or remove what was added.
+- One person per extension.
+
+Setup, once, in Google Cloud Console:
+
+1. Create a project (or reuse one) and enable the **People API**.
+2. OAuth consent screen: *External*, add the scope
+   `.../auth/contacts.readonly`, then **Publish app** (in *Testing* Google
+   expires every connection after 7 days). Until Google verifies the app,
+   people see a "Google hasn't verified this app" screen and click
+   *Advanced → Go to …*; fine for staff, and the limit is 100 people.
+3. Credentials → Create OAuth client ID → *Web application*, with redirect
+   URIs `https://portal.atlantisutility.com/api/google-contacts/callback`
+   and `http://localhost:3000/api/google-contacts/callback`.
+4. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (with
+   `INTEGRATIONS_KEY`, which encrypts the stored Google tokens).
 
 ## Scheduled messages (workflows)
 

@@ -12,6 +12,8 @@ import { ACCENT, areaFor } from "@/lib/areas";
 import { useAuth } from "@/lib/auth-context";
 import { getInitials } from "@/lib/utils";
 import { useUnreadMessages, useUnreadPoller } from "@/lib/unread-messages";
+import { PhoneProvider } from "@/components/phone/PhoneProvider";
+import PhoneWidget from "@/components/phone/PhoneWidget";
 
 // Notifications live in localStorage and announce themselves with an
 // "app-notification" event, so the unread count is read as an external store.
@@ -112,6 +114,8 @@ export default function DashboardShell({ children }: { children: React.ReactNode
   );
 
   return (
+    // The phone sits above the pages, so a call survives moving between them.
+    <PhoneProvider enabled={signedIn}>
     <div
       className="flex h-screen overflow-hidden bg-canvas"
       style={{ "--area-ink": accent.cssInk } as React.CSSProperties}
@@ -231,5 +235,7 @@ export default function DashboardShell({ children }: { children: React.ReactNode
         </div>
       </main>
     </div>
+    <PhoneWidget />
+    </PhoneProvider>
   );
 }

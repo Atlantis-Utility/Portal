@@ -460,6 +460,21 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
     };
   }, [enabled, attempt, track, attachAudio, loadDirectory, loadRecents, update]);
 
+  // No phone yet (no extension when the page loaded, or it couldn't
+  // connect): look again when the person comes back to the tab, so an
+  // extension set in the meantime - or a blip - doesn't leave the phone
+  // hidden until a reload.
+  useEffect(() => {
+    if (!enabled || (status !== "off" && status !== "error")) return;
+    const recheck = () => { if (document.visibilityState === "visible") setAttempt((a) => a + 1); };
+    window.addEventListener("focus", recheck);
+    document.addEventListener("visibilitychange", recheck);
+    return () => {
+      window.removeEventListener("focus", recheck);
+      document.removeEventListener("visibilitychange", recheck);
+    };
+  }, [enabled, status]);
+
   // Leaving the page mid-call drops it; ask first.
   useEffect(() => {
     if ((!call || call.state === "ended") && !second) return;

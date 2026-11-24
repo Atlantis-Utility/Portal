@@ -27,7 +27,7 @@ async function readBook(domain: string, user: string): Promise<Array<Record<stri
  * conversation's extension, so reading only one book misses people.
  *
  * A shared contact also shows up in every extension's read (with
- * "shared": true); those repeats are dropped.
+ * "shared": true); it's kept once, filed under the shared book ("*").
  */
 export async function readAllBooks(domain: string): Promise<Array<Record<string, string>>> {
   const subscribers = (await getSubscribers(domain).catch(() => [])) as Array<{ user?: string }>;
@@ -39,10 +39,15 @@ export async function readAllBooks(domain: string): Promise<Array<Record<string,
     books.push(...(await Promise.all(users.slice(i, i + 3).map((u) => readBook(domain, u)))));
   }
   const seen = new Set<string>();
-  return books.flat().filter((c) => {
-    const key = `${c.user}|${c.contact_id ?? `${c.first_name}|${c.last_name}|${c.cell_phone}`}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return books
+    .flat()
+    // A shared contact comes back in every extension's read too (54 copies
+    // of one "TesT NUMBER"): keep it once, as the shared book's.
+    .map((c) => (String(c.shared) === "true" ? { ...c, user: "*" } : c))
+    .filter((c) => {
+      const key = `${c.user}|${c.contact_id ?? `${c.first_name}|${c.last_name}|${c.cell_phone}`}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }

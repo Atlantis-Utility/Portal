@@ -8,6 +8,7 @@ import Overlay from "@/components/ui/Overlay";
 import Header from "@/components/layout/Header";
 import StatCard from "@/components/ui/StatCard";
 import CallLink from "@/components/phone/CallLink";
+import { colourFor, initialsFor } from "@/components/messages/Avatar";
 import ExportMenu from "@/components/ui/ExportMenu";
 import { BookUser, Mail, Smartphone, Phone, RefreshCw, AlertCircle, Plus, X, Trash2 } from "lucide-react";
 
@@ -39,12 +40,24 @@ const EMPTY_FORM = {
   email: "",
 };
 
+/**
+ * A contact that's plainly a test: "test" in the name, or only fictional
+ * numbers (555-01xx and 555-1212, the ones reserved for films and examples).
+ */
+function isTestEntry(c: { first_name?: string; last_name?: string; company?: string; cell_phone?: string; work_phone?: string; home_phone?: string }): boolean {
+  const name = `${c.first_name ?? ""} ${c.last_name ?? ""} ${c.company ?? ""}`;
+  if (/\btest/i.test(name)) return true;
+  const nums = [c.cell_phone, c.work_phone, c.home_phone].map((n) => (n ?? "").replace(/\D/g, "").slice(-10)).filter((n) => n.length === 10);
+  return nums.length > 0 && nums.every((n) => /^\d{3}555(01\d\d|1212)$/.test(n));
+}
+
 export default function ContactsPage() {
   const [state, setState] = useState<ViewState>("loading");
   const confirm = useConfirm();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [showTests, setShowTests] = useState(false);
 
   // The domain is always ours: the route fills it in, as Messages does.
   // The ERP picked from every reseller customer's domain, through a
@@ -140,9 +153,14 @@ export default function ContactsPage() {
     }
   };
 
-  const withEmail = contacts.filter((c) => Boolean(c.email)).length;
-  const withMobile = contacts.filter((c) => Boolean(c.cell_phone)).length;
-  const withWork = contacts.filter((c) => Boolean(c.work_phone)).length;
+  // Entries that are plainly tests ("TesT NUMBER", 555-1212) are hidden
+  // unless asked for: the books are shared with the phones, so they aren't
+  // deleted from here, just kept out of the way.
+  const real = contacts.filter((c) => showTests || !isTestEntry(c));
+  const hiddenTests = contacts.filter((c) => isTestEntry(c)).length;
+  const withEmail = real.filter((c) => Boolean(c.email)).length;
+  const withMobile = real.filter((c) => Boolean(c.cell_phone)).length;
+  const withWork = real.filter((c) => Boolean(c.work_phone)).length;
 
   const exportData = () => ({
     filename: "contacts",
@@ -155,13 +173,16 @@ export default function ContactsPage() {
     ]),
   });
 
-  const filtered = contacts.filter((c) => {
-    const term = search.toLowerCase();
+  const filtered = real.filter((c) => {
+    const term = search.toLowerCase().trim();
+    if (!term) return true;
+    const digits = term.replace(/\D/g, "");
     return (
       c.first_name?.toLowerCase().includes(term) ||
       c.last_name?.toLowerCase().includes(term) ||
       c.email?.toLowerCase().includes(term) ||
-      c.company?.toLowerCase().includes(term)
+      c.company?.toLowerCase().includes(term) ||
+      (digits.length >= 3 && [c.cell_phone, c.work_phone, c.home_phone].some((n) => (n ?? "").replace(/\D/g, "").includes(digits)))
     );
   });
 
@@ -169,7 +190,7 @@ export default function ContactsPage() {
     <div>
       <Header
         title="Contacts"
-        subtitle={state === "ok" ? `${contacts.length} contact${contacts.length !== 1 ? "s" : ""}` : "Manage RingLogix contacts"}
+        subtitle={state === "ok" ? `${real.length} contact${real.length !== 1 ? "s" : ""} across every contact book` : "Every RingLogix contact book in one place"}
         actions={
           <>
             <ExportMenu data={exportData} disabled={state !== "ok" || filtered.length === 0} />
@@ -208,7 +229,7 @@ export default function ContactsPage() {
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <StatCard label="Contacts" hint="Across every book" value={contacts.length} loading={state !== "ok"} icon={BookUser} tone="bg-tint-blue text-ink-blue" />
+        <StatCard label="Contacts" hint="Across every book" value={real.length} loading={state !== "ok"} icon={BookUser} tone="bg-tint-blue text-ink-blue" />
         <StatCard label="With email" hint="Address on file" value={withEmail} loading={state !== "ok"} icon={Mail} tone="bg-tint-green text-ink-green" />
         <StatCard label="With mobile" hint="Cell number on file" value={withMobile} loading={state !== "ok"} icon={Smartphone} tone="bg-tint-violet text-ink-violet" />
         <StatCard label="With work phone" hint="Work number on file" value={withWork} loading={state !== "ok"} icon={Phone} tone="bg-tint-amber text-ink-amber" />
@@ -267,62 +288,65 @@ export default function ContactsPage() {
 
         {state === "ok" && filtered.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-[#eaeaea] bg-[#fafafa]">
-                  <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">Name</th>
-                  <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">Book</th>
-                  <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">Company</th>
-                  <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">Work Phone</th>
-                  <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">Cell Phone</th>
-                  <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">Home Phone</th>
-                  <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">Email</th>
-                  <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">Tags</th>
-                  <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((c, i) => (
-                  <tr key={(c.contact_id ?? "") + i} className="border-b border-[#f7f7f7] last:border-0 hover:bg-[#fafafa] transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-[#e8f2ff] flex items-center justify-center shrink-0">
-                          <BookUser className="w-3.5 h-3.5 text-[#0070f3]" />
-                        </div>
-                        <span className="text-sm font-medium text-[#0a0a0a]">{[c.first_name, c.last_name].filter(Boolean).join(" ") || "-"}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-[#666] whitespace-nowrap">{!c.user || c.user === "*" ? "Shared" : `Ext ${c.user}`}</td>
-                    <td className="px-4 py-3 text-sm text-[#666]">{c.company || "-"}</td>
-                    <td className="px-4 py-3 text-sm text-[#666] font-mono">{c.work_phone ? <CallLink number={c.work_phone} name={[c.first_name, c.last_name].filter(Boolean).join(" ")} className="hover:text-[#0070f3] hover:underline">{formatPhone(c.work_phone)}</CallLink> : "-"}</td>
-                    <td className="px-4 py-3 text-sm text-[#666] font-mono">{c.cell_phone ? <CallLink number={c.cell_phone} name={[c.first_name, c.last_name].filter(Boolean).join(" ")} className="hover:text-[#0070f3] hover:underline">{formatPhone(c.cell_phone)}</CallLink> : "-"}</td>
-                    <td className="px-4 py-3 text-sm text-[#666] font-mono">{c.home_phone ? <CallLink number={c.home_phone} name={[c.first_name, c.last_name].filter(Boolean).join(" ")} className="hover:text-[#0070f3] hover:underline">{formatPhone(c.home_phone)}</CallLink> : "-"}</td>
-                    <td className="px-4 py-3 text-sm text-[#666]">{c.email || "-"}</td>
-                    <td className="px-4 py-3">
-                      {/* RingLogix stores tags as ",post,vip," - one chip each. */}
-                      {(c.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean).length > 0 ? (
-                        <span className="flex flex-wrap gap-1">
-                          {(c.tags ?? "").split(",").map((t) => t.trim()).filter(Boolean).map((t) => (
-                            <span key={t} className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-[#f1f1f1] text-[#666]">{t}</span>
-                          ))}
-                        </span>
-                      ) : (
-                        <span className="text-sm text-[#999]">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => deleteContact(c)}
-                        className="p-1.5 rounded-lg text-[#999] hover:text-[#f31260] hover:bg-[#fff0f3] transition-colors"
-                        data-tip="Delete contact"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="min-w-[44rem]">
+              {/* One line per contact. */}
+              <div className="grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1.6fr)_4.5rem] gap-4 px-5 py-2.5 border-b border-line bg-surface-2 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
+                <span>Name</span><span>Company</span><span>Phone</span><span>Email</span><span />
+              </div>
+              <ul className="divide-y divide-line">
+                {filtered.map((c, i) => {
+                  const name = [c.first_name, c.last_name].filter(Boolean).join(" ") || c.company || "Unnamed";
+                  const phones = ([["Mobile", c.cell_phone], ["Work", c.work_phone], ["Home", c.home_phone]] as Array<[string, string | undefined]>).filter(([, n]) => n);
+                  const [primaryLabel, primary] = phones[0] ?? ["", ""];
+                  const book = !c.user || c.user === "*" ? "Shared" : `Ext ${c.user}`;
+                  return (
+                    <li key={(c.contact_id ?? "") + i} className="group grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1.6fr)_4.5rem] gap-4 items-center px-5 py-2.5 hover:bg-surface-3 transition-colors">
+                      <span className="flex items-center gap-2.5 min-w-0">
+                        <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 ${colourFor(name)}`}>{initialsFor(name)}</span>
+                        <span className="text-sm font-medium text-fg truncate">{name}</span>
+                        <span className="shrink-0 text-[10.5px] font-medium px-1.5 py-0.5 rounded bg-surface-3 text-fg-muted">{book}</span>
+                      </span>
+                      <span className="text-sm text-fg-muted truncate">{c.company || "—"}</span>
+                      <span className="flex items-center gap-1.5 min-w-0 text-sm">
+                        {primary ? (
+                          <>
+                            <span className="text-[10.5px] text-fg-subtle shrink-0">{primaryLabel}</span>
+                            <CallLink number={primary} name={name} className="text-fg tabular-nums truncate hover:text-[#0070f3] hover:underline">{formatPhone(primary) || primary}</CallLink>
+                            {phones.length > 1 && (
+                              <span className="shrink-0 text-[10.5px] font-medium px-1.5 py-0.5 rounded bg-surface-3 text-fg-muted" title={phones.slice(1).map(([l, n]) => `${l}: ${formatPhone(n) || n}`).join(", ")}>
+                                +{phones.length - 1}
+                              </span>
+                            )}
+                          </>
+                        ) : <span className="text-fg-subtle">{"—"}</span>}
+                      </span>
+                      <span className="text-sm text-fg-muted truncate">{c.email ? <a href={`mailto:${c.email}`} className="hover:text-fg hover:underline">{c.email}</a> : "—"}</span>
+                      <span className="flex items-center justify-end gap-0.5">
+                        {primary && (
+                          <CallLink number={primary} name={name} tip={`Call ${name}`} className="w-8 h-8 rounded-lg flex items-center justify-center text-fg-subtle hover:bg-tint-green hover:text-ink-green transition-colors">
+                            <Phone className="w-3.5 h-3.5" />
+                          </CallLink>
+                        )}
+                        <button
+                          onClick={() => deleteContact(c)}
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-fg-subtle opacity-0 group-hover:opacity-100 hover:text-[#f31260] hover:bg-[#fff0f3] transition-all"
+                          data-tip="Delete contact"
+                          aria-label={`Delete ${name}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+        )}
+        {state === "ok" && hiddenTests > 0 && (
+          <div className="px-5 py-2.5 border-t border-line text-xs text-fg-subtle flex items-center justify-between">
+            <span>{showTests ? `Showing ${hiddenTests} test entr${hiddenTests === 1 ? "y" : "ies"}.` : `${hiddenTests} test entr${hiddenTests === 1 ? "y is" : "ies are"} hidden.`}</span>
+            <button onClick={() => setShowTests((v) => !v)} className="font-medium text-fg-muted hover:text-fg">{showTests ? "Hide them" : "Show them"}</button>
           </div>
         )}
       </div>

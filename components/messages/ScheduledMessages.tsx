@@ -963,7 +963,7 @@ function Editor({
                   <Select
                     value={fromNumber}
                     onChange={setFromNumber}
-                    options={senders.map((s) => ({ value: s.number, label: `${formatPhone(s.number) || s.number} · ext ${s.user}` }))}
+                    options={senders.map((s) => ({ value: s.number, label: formatPhone(s.number) || s.number }))}
                   />
                 </div>
               </div>

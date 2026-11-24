@@ -887,7 +887,7 @@ function NewMessage({
             <Select
               value={from}
               onChange={setFrom}
-              options={senders.map((sdr) => ({ value: sdr.number, label: `${formatPhone(sdr.number) || sdr.number} · ext ${sdr.user}` }))}
+              options={senders.map((sdr) => ({ value: sdr.number, label: formatPhone(sdr.number) || sdr.number }))}
             />
           ) : (
             <p className="text-sm text-[#0a0a0a]">{formatPhone(from) || from || "—"}</p>

@@ -100,18 +100,18 @@ export default function Sidebar({
     >
       <aside className="h-full w-full bg-surface border-r border-line flex flex-col overflow-hidden">
         {/* Brand */}
-        <div className={`h-14 flex items-center shrink-0 ${collapsed ? "justify-center" : "px-4"}`}>
+        <div className="relative h-14 flex items-center justify-center shrink-0 px-4">
           <Link href="/" onClick={onMobileClose} className="min-w-0" data-tip={collapsed ? "Atlantis Portal" : undefined}>
             {collapsed ? (
-              <span className="text-sm font-semibold text-fg">AP</span>
+              <span className="text-base font-bold text-fg">AP</span>
             ) : (
-              <span className="text-[15px] font-semibold tracking-tight text-fg whitespace-nowrap">Atlantis Portal</span>
+              <span className="text-lg font-bold tracking-tight text-fg whitespace-nowrap">Atlantis Portal</span>
             )}
           </Link>
           {!collapsed && (
             <button
               onClick={onMobileClose}
-              className="md:hidden ml-auto p-1.5 rounded-lg hover:bg-surface-3 transition-colors text-fg-muted"
+              className="md:hidden absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg hover:bg-surface-3 transition-colors text-fg-muted"
               aria-label="Close navigation"
             >
               <X className="w-4 h-4" />

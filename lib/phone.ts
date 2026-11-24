@@ -1,6 +1,6 @@
 import "server-only";
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { createDevice, getDevice, getSubscribers, ourDomain } from "@/lib/ringlogix";
+import { coreApi, createDevice, getDevice, getSubscribers, ourDomain } from "@/lib/ringlogix";
 
 /**
  * The portal phone, server side: who calls as which extension, and the SIP
@@ -100,4 +100,51 @@ export async function phoneLogin(extension: string, displayName: string): Promis
   const login = { extension, device, domain, password, servers: phoneServers(), displayName };
   cache.set(extension, { login, until: Date.now() + 10 * 60_000 });
   return login;
+}
+
+export interface ParkSpot {
+  /** What to transfer to (park) or dial (pick up): "710". */
+  spot: string;
+  label: string;
+  /** Who's parked there, if anyone. */
+  parked: { name: string; number: string; since: number | null } | null;
+}
+
+/**
+ * The domain's park spots and who is in them.
+ *
+ * Park spots here are call queues ("Park 1" = 710, 711, 712), reached
+ * through the "Directed-Parktrieve" dial rule on 71x: transferring a call
+ * to one parks it, dialing it picks the call back up, and after a while it
+ * rings back whoever parked it.
+ */
+export async function parkSpots(): Promise<ParkSpot[]> {
+  const domain = ourDomain();
+  const { status, data } = await coreApi("GET", `/domains/${encodeURIComponent(domain)}/callqueues`);
+  if (status !== 200 || !Array.isArray(data)) return [];
+  const queues = (data as Array<{ callqueue?: string; description?: string; "active-queued-calls-total-current"?: number }>)
+    .filter((q) => /^park/i.test(q.description ?? "") || /^7[1-4]\d$/.test(q.callqueue ?? ""))
+    .sort((a, b) => String(a.callqueue).localeCompare(String(b.callqueue), undefined, { numeric: true }));
+  // Who is in them: the domain's active calls, where a parked call is one
+  // whose far end is the spot (term user "712"). queuedcall/list answers
+  // null even with a call parked (seen 2026-11-24), so it isn't used.
+  const busy = queues.some((q) => (q["active-queued-calls-total-current"] ?? 0) > 0);
+  let calls: Array<Record<string, unknown>> = [];
+  if (busy) {
+    const r = await coreApi("GET", `/domains/${encodeURIComponent(domain)}/calls`);
+    if (r.status === 200 && Array.isArray(r.data)) calls = r.data as Array<Record<string, unknown>>;
+  }
+  return queues.map((q) => {
+    const spot = String(q.callqueue);
+    let parked: ParkSpot["parked"] = null;
+    if ((q["active-queued-calls-total-current"] ?? 0) > 0) {
+      const c = calls.find((x) => String(x["call-term-user"] ?? "") === spot) ?? {};
+      const digits = (v: unknown) => String(v ?? "").replace(/\D/g, "");
+      const number = [c["caller-id-number"], c["call-orig-from-user"], c["call-orig-user"]].map(digits).find((d) => d.length >= 3) ?? "";
+      const name = String(c["caller-id-name"] ?? c["call-orig-from-name"] ?? c["call-orig-name"] ?? "").trim();
+      const since = Date.parse(String(c["call-answer-datetime"] ?? c["call-start-datetime"] ?? ""));
+      parked = { name: name && name.replace(/\D/g, "") !== number ? name : "", number, since: Number.isFinite(since) ? since : null };
+    }
+    return { spot, label: q.description || `Park ${spot}`, parked };
+  });
 }

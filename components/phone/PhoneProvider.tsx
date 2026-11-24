@@ -6,6 +6,7 @@ import type { RTCSession } from "jssip/lib/RTCSession";
 import { dialable, loadJsSIP } from "@/lib/phone/sip-client";
 import { whoHas, type DirectoryEntry, type Recents } from "@/lib/phone/types";
 import { formatPhone } from "@/lib/utils";
+import type { ParkSpot } from "@/lib/phone";
 
 /**
  * The portal phone: this browser as a SIP device on the person's own
@@ -77,6 +78,11 @@ export interface PhoneApi {
   endSecond: () => void;
   /** Ends the first call only; the second carries on as the main call. */
   endMain: () => void;
+  /** Park spots and who is in them; null until first asked for. */
+  parks: ParkSpot[] | null;
+  loadParks: () => void;
+  /** Parks the call on a spot (a transfer to it); anyone can pick it up by dialing it. */
+  park: (spot: string) => void;
   /** Contacts and colleagues to call; null until first asked for. */
   directory: DirectoryEntry[] | null;
   loadDirectory: (refresh?: boolean) => void;
@@ -178,6 +184,7 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
   const [directory, setDirectory] = useState<DirectoryEntry[] | null>(null);
   const directoryRef = useRef<Promise<DirectoryEntry[]> | null>(null);
   const [recents, setRecents] = useState<Recents | null>(null);
+  const [parks, setParks] = useState<ParkSpot[] | null>(null);
   const recentsBusy = useRef(false);
   const recentsWanted = useRef(false);
 
@@ -190,6 +197,13 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
       .then((b: Recents | null) => { if (b) setRecents({ ...b, loadedAt: Date.now() }); })
       .catch(() => { /* keeps what it had */ })
       .finally(() => { recentsBusy.current = false; });
+  }, []);
+
+  const loadParks = useCallback(() => {
+    fetch("/api/phone/parks", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b: { spots?: ParkSpot[] } | null) => { if (b?.spots) setParks(b.spots); })
+      .catch(() => { /* keeps what it had */ });
   }, []);
 
   /** Fetched once, when first needed: it reads every contact book. */
@@ -218,6 +232,8 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
   const infos = useRef<Record<Line, CallInfo | null>>({ main: null, second: null });
   const audios = useRef(new Map<RTCSession, HTMLAudioElement>());
   const transferred = useRef(new WeakSet<RTCSession>());
+  // What the ended call says: "Transferred", or "Parked on 711".
+  const referLabels = useRef(new WeakMap<RTCSession, string>());
   const conf = useRef<{ mics: MediaStreamTrack[]; restore: () => void } | null>(null);
   const domainRef = useRef("");
   const tonesRef = useRef<ReturnType<typeof makeTones> | null>(null);
@@ -300,7 +316,7 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
       if (el) el.srcObject = null;
       audios.current.delete(session);
       endConference();
-      const reason = transferred.current.has(session) ? "Transferred"
+      const reason = transferred.current.has(session) ? referLabels.current.get(session) ?? "Transferred"
         : e.cause === "Terminated" || e.cause === "Bye" ? "Call ended"
         : e.cause === "Canceled" && session.direction === "incoming" ? "Missed call"
         : END_REASONS[e.cause ?? ""] ?? (e.cause ? String(e.cause) : "Call ended");
@@ -491,15 +507,16 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
    * transfer's progress with NOTIFYs; once the far side has it (or after a
    * few seconds of silence, which some carriers leave us in) we drop out.
    */
-  const refer = useCallback((from: RTCSession, target: string, opts: { replaces?: RTCSession; alsoEnd?: RTCSession } = {}) => {
-    say("Transferring…", 0);
+  const refer = useCallback((from: RTCSession, target: string, opts: { replaces?: RTCSession; alsoEnd?: RTCSession; label?: string } = {}) => {
+    say(opts.label ? "Parking…" : "Transferring…", 0);
+    referLabels.current.set(from, opts.label ?? "Transferred");
     let done = false;
     const drop = () => {
       if (done) return;
       done = true;
       transferred.current.add(from);
       if (opts.alsoEnd) transferred.current.add(opts.alsoEnd);
-      say("Transferred");
+      say(opts.label ?? "Transferred");
       for (const s of [opts.alsoEnd, from]) { try { s?.terminate(); } catch { /* already gone */ } }
     };
     const fail = (why: string) => {
@@ -528,7 +545,13 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
             // attendant, 2026-11-24).
             const why = /"([^"]+)"/.exec(e.response?.getHeader?.("Warning") ?? "")?.[1]?.replace(/\.$/, "");
             console.warn("[phone] REFER refused", e.response?.status_code, why ?? e.cause);
-            fail(`Couldn't transfer: ${why ?? `RingLogix answered ${e.response?.status_code ?? e.cause ?? "nothing"}`}`);
+            fail(
+              /target session/i.test(why ?? "")
+                // No caller on the far side to move: a call with the auto
+                // attendant or another system service.
+                ? `This call can't be ${opts.label ? "parked" : "transferred"}: it isn't with a person`
+                : `Couldn't ${opts.label ? "park" : "transfer"}: ${why ?? `RingLogix answered ${e.response?.status_code ?? e.cause ?? "nothing"}`}`,
+            );
           },
           accepted: drop,
           failed: () => fail("The transfer didn't go through"),
@@ -647,12 +670,22 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
       refer(main, other.remote_identity.uri.toString(), { replaces: other, alsoEnd: other });
     },
     merge: () => { void merge(); },
+    parks,
+    loadParks,
+    park: (spot: string) => {
+      const s = sessions.current.main;
+      if (!s || sessions.current.second) return;
+      // A park is a transfer to the spot: RingLogix's Directed-Parktrieve
+      // rule holds the caller there until someone dials it.
+      refer(s, `sip:${spot}@${domainRef.current}`, { label: `Parked on ${spot}` });
+      setTimeout(loadParks, 2500);
+    },
     retry: () => { setError(""); setAttempt((a) => a + 1); },
     directory,
     loadDirectory: (refresh?: boolean) => { void loadDirectory(refresh); },
     recents,
     loadRecents,
-  }), [enabled, status, extension, error, call, second, conference, notice, open, dial, directory, loadDirectory, recents, loadRecents, place, refer, merge, endConference, update]);
+  }), [enabled, status, extension, error, call, second, conference, notice, open, dial, directory, loadDirectory, recents, loadRecents, place, refer, merge, endConference, update, parks, loadParks]);
 
   return (
     <PhoneContext.Provider value={api}>

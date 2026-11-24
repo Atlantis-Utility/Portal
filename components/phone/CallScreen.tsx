@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  Phone, PhoneOff, Mic, MicOff, Pause, Play, Grid3x3, UserPlus, PhoneForwarded, ArrowLeft, Search, Merge, X,
+  Phone, PhoneOff, Mic, MicOff, Pause, Play, Grid3x3, UserPlus, PhoneForwarded, ArrowLeft, Search, Merge, X, SquareParking, RefreshCw,
 } from "lucide-react";
 import type { CallInfo, PhoneApi } from "./PhoneProvider";
 import { colourFor, initialsFor } from "@/components/messages/Avatar";
@@ -134,7 +134,7 @@ function Picker({ title, directory, onPick, onBack }: { title: string; directory
 
 export default function CallScreen({ phone }: { phone: PhoneApi }) {
   const { call, second, conference } = phone;
-  const [mode, setMode] = useState<"controls" | "keypad" | "transfer" | "add">("controls");
+  const [mode, setMode] = useState<"controls" | "keypad" | "transfer" | "add" | "park">("controls");
   const [target, setTarget] = useState<{ number: string; name: string } | null>(null);
   const clock = useClock(call);
   const clock2 = useClock(second);
@@ -146,6 +146,42 @@ export default function CallScreen({ phone }: { phone: PhoneApi }) {
   const notice = phone.notice ? (
     <p className="mx-4 mt-3 text-xs text-center rounded-lg px-3 py-1.5 bg-surface-3 text-fg-muted">{phone.notice}</p>
   ) : null;
+
+  // ── Choosing a park spot ──
+  if (mode === "park") {
+    const spots = phone.parks;
+    return (
+      <div className="flex-1 min-h-0 flex flex-col">
+        <div className="px-4 pt-3 pb-1 flex items-center gap-2">
+          <button type="button" onClick={() => setMode("controls")} className="w-8 h-8 rounded-lg flex items-center justify-center text-fg-muted hover:bg-surface-3" aria-label="Back"><ArrowLeft className="w-4 h-4" /></button>
+          <h2 className="text-[15px] font-semibold text-fg">Park {label(call)}</h2>
+        </div>
+        <p className="px-5 pb-3 text-[12px] text-fg-subtle">Anyone can pick the call up by dialing the spot from any phone. If nobody does, it rings you back.</p>
+        <div className="flex-1 overflow-y-auto px-4 space-y-2">
+          {!spots ? (
+            <p className="py-8 text-center text-xs text-fg-subtle flex items-center justify-center gap-2"><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Checking the park spots…</p>
+          ) : spots.length === 0 ? (
+            <p className="py-8 text-center text-xs text-fg-subtle">No park spots are set up on the phone system.</p>
+          ) : spots.map((sp) => (
+            <button
+              key={sp.spot}
+              type="button"
+              disabled={Boolean(sp.parked)}
+              onClick={() => { phone.park(sp.spot); setMode("controls"); }}
+              className="w-full flex items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2.5 text-left hover:border-line-strong disabled:opacity-60 disabled:hover:border-line"
+            >
+              <span className={`w-11 h-11 rounded-lg flex items-center justify-center text-sm font-semibold tabular-nums ${sp.parked ? "bg-tint-amber text-ink-amber" : "bg-tint-green text-ink-green"}`}>{sp.spot}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium text-fg">{sp.label}</span>
+                <span className="block text-[12px] text-fg-subtle truncate">{sp.parked ? `In use${sp.parked.name || sp.parked.number ? ` · ${sp.parked.name || shown(sp.parked.number)}` : ""}` : "Free"}</span>
+              </span>
+              {!sp.parked && <span className="text-xs font-semibold text-[#0070f3]">Park here</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   // ── Choosing who to transfer to / add ──
   if (mode === "transfer" || mode === "add") {
@@ -330,7 +366,7 @@ export default function CallScreen({ phone }: { phone: PhoneApi }) {
               </Control>
               <Control onClick={() => { phone.loadDirectory(); setMode("add"); }} label="Add call" disabled={!live}><UserPlus className="w-6 h-6" /></Control>
               <Control onClick={() => { phone.loadDirectory(); setMode("transfer"); }} label="Transfer" disabled={!live}><PhoneForwarded className="w-6 h-6" /></Control>
-              <span />
+              <Control onClick={() => { phone.loadParks(); setMode("park"); }} label="Park" disabled={!live}><SquareParking className="w-6 h-6" /></Control>
             </div>
           )}
           <div className="grid grid-cols-3 items-center">

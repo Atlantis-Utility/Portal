@@ -109,6 +109,19 @@ with **Reseller** scope, plus a separate API application. Hard-won facts:
   202. Transferring a call *with the auto attendant* to our own extension
   was refused 400 (`"Failed to find Target Session."`). Conferences are mixed in the browser (each leg is sent the mic
   plus the other leg's audio) and verified with two auto attendants.
+- **Park** is a REFER to a park spot: queues 710-712 ("Park 1-3") behind the
+  `sip:71?@*` "Directed-Parktrieve" rule (transferring parks, dialing picks
+  up, then rings back the parker). Who's parked comes from v2
+  `/domains/{d}/calls` (the call whose term user is the spot);
+  `queuedcall/list` answers null even with a call parked. Verified with a
+  person 2026-11-24.
+- **Testing calls: 801 is not an auto attendant you can safely ring.** It
+  forwards always to extension 100's *voicemail*, so test calls to it leave
+  messages in Balijinder's mailbox, and can't be transferred or parked
+  ("Failed to find Target Session" - nobody's there). A test browser closed
+  without hanging up leaves the call up for minutes; end it with v2
+  `DELETE /domains/{d}/users/{u}/calls/{orig-callid}` (202), and list what's
+  live with `GET /domains/{d}/calls`.
 - Which extension a person calls as lives in `phone_extensions`, admin-set
   in Edit Profile. Never on `employees.data`: any signed-in user can write
   that row, and the value decides whose SIP password the browser gets.

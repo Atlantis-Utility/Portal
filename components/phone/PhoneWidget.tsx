@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Phone, Grid3x3, Delete, X, RefreshCw, PhoneIncoming, PhoneOutgoing,
-  PhoneMissed, Search, Users, Clock, Voicemail as VoicemailIcon, ChevronDown, ArrowRightLeft, Sparkles, Info,
+  PhoneMissed, Search, Users, Clock, Voicemail as VoicemailIcon, ChevronDown, ArrowRightLeft, Sparkles, Info, SquareParking,
 } from "lucide-react";
+import { usePolling } from "@/lib/use-polling";
 import CallDetailPanel from "@/components/calls/CallDetailPanel";
 import { usePhoneState, type CallInfo } from "./PhoneProvider";
 import CallScreen from "./CallScreen";
@@ -393,7 +394,9 @@ function KeypadTab({ ready, extension, directory, onCall }: { ready: boolean; ex
   const place = () => { if (number.trim()) onCall(number, match && match.n.number === digits ? match.e.name : ""); };
 
   return (
-    <div className="h-full flex flex-col justify-end pb-4">
+    // min-h, not h: with the parked-calls strip above, the keypad scrolls
+    // instead of growing up over the strip (it hid the Pick up button).
+    <div className="min-h-full flex flex-col justify-end pb-4">
       <div className="px-5">
         <div className="flex items-center gap-1 h-12">
           <span className="w-9" />
@@ -449,6 +452,8 @@ export default function PhoneWidget() {
     try { return Number(localStorage.getItem(SEEN_KEY) ?? 0) || 0; } catch { return 0; }
   });
   const clock = useClock(phone?.call ?? null);
+  // Who's parked, kept fresh while the phone is open and idle.
+  usePolling(() => phone?.loadParks(), 10_000, Boolean(phone && phone.open && !phone.call && phone.status !== "off"));
 
   const recents = phone?.recents ?? null;
   const missedNew = useMemo(() => {
@@ -477,7 +482,7 @@ export default function PhoneWidget() {
     }
   };
   const toggle = () => {
-    if (!open) { phone.loadRecents(); phone.loadDirectory(); }
+    if (!open) { phone.loadRecents(); phone.loadDirectory(); phone.loadParks(); }
     setOpen(!open);
   };
   const callFrom = (n: string, name: string) => phone.dial(n, name);
@@ -536,7 +541,26 @@ export default function PhoneWidget() {
             <CallScreen phone={phone} />
           ) : (
             <>
-              <div className="flex-1 min-h-0">
+              {/* Calls waiting in a park spot: one tap picks them up. */}
+              {(phone.parks ?? []).some((p) => p.parked) && (
+                <div className="shrink-0 mx-3 mt-3 rounded-xl bg-tint-amber px-3 py-2 space-y-1.5">
+                  <p className="text-[10.5px] font-semibold uppercase tracking-wider text-ink-amber flex items-center gap-1"><SquareParking className="w-3 h-3" /> Parked calls</p>
+                  {(phone.parks ?? []).filter((p) => p.parked).map((p) => (
+                    <div key={p.spot} className="flex items-center gap-2">
+                      <span className="text-xs font-semibold tabular-nums text-ink-amber w-8">{p.spot}</span>
+                      <span className="min-w-0 flex-1 text-[13px] text-fg truncate">{p.parked?.name || (p.parked?.number ? shown(p.parked.number) : "Caller")}</span>
+                      <button
+                        type="button"
+                        onClick={() => phone.dial(p.spot, p.parked?.name || (p.parked?.number ? shown(p.parked.number) : `Parked on ${p.spot}`))}
+                        className="text-xs font-semibold rounded-lg px-2.5 py-1 bg-[#17c964] text-white hover:bg-[#12a150]"
+                      >
+                        Pick up
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className={`flex-1 min-h-0 ${tab === "keypad" ? "overflow-y-auto" : ""}`}>
                 {tab === "recents" && <RecentsTab recents={recents} directory={phone.directory} onCall={callFrom} />}
                 {tab === "contacts" && <ContactsTab entries={phone.directory} onCall={callFrom} />}
                 {tab === "keypad" && <KeypadTab ready={status === "ready"} extension={phone.extension} directory={phone.directory} onCall={callFrom} />}

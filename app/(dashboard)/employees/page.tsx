@@ -7,7 +7,7 @@ import Header from "@/components/layout/Header";
 import ExportMenu from "@/components/ui/ExportMenu";
 import { subscribeEmployees } from "@/lib/db/employees";
 import { getAvatarColor, getInitials, formatDate } from "@/lib/utils";
-import { Search, Plus } from "lucide-react";
+import { Search, Plus, CheckCircle2, Clock, CircleDashed, Send, RefreshCw } from "lucide-react";
 import type { Employee, EmployeeStatus } from "@/lib/mock-data";
 import AddEmployeeDrawer from "@/components/employees/AddEmployeeDrawer";
 import Select from "@/components/ui/Select";
@@ -167,28 +167,28 @@ export default function EmployeesPage() {
         <table className="w-full min-w-180">
           <thead>
             <tr className="border-b border-[#eaeaea] bg-[#fafafa]">
-              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">
+              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-3 py-3">
                 User
               </th>
-              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">
+              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-3 py-3">
                 Role
               </th>
-              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">
+              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-3 py-3">
                 Access
               </th>
-              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">
+              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-3 py-3">
                 Status
               </th>
-              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">
+              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-3 py-3">
                 Login
               </th>
-              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">
+              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-3 py-3">
                 Location
               </th>
-              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">
+              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-3 py-3">
                 Start Date
               </th>
-              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-4 py-3">
+              <th className="text-left text-[10px] font-semibold text-[#999] uppercase tracking-wider px-3 py-3">
                 Actions
               </th>
             </tr>
@@ -221,23 +221,23 @@ export default function EmployeesPage() {
                             {getInitials(emp.name)}
                           </span>
                         </div>
-                        <div>
-                          <p className="text-sm font-medium text-[#0a0a0a]">{emp.name}</p>
-                          <p className="text-xs text-[#999]">{emp.email}</p>
+                        <div className="min-w-0 max-w-[15rem]">
+                          <p className="text-sm font-medium text-[#0a0a0a] truncate">{emp.name}</p>
+                          <p className="text-xs text-[#999] truncate" title={emp.email}>{emp.email}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-sm text-[#444]">{emp.role}</span>
+                      <span className="block text-sm text-[#444] truncate max-w-[12rem]" title={emp.role}>{emp.role || "—"}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="inline-flex items-center text-xs font-medium px-2.5 py-1 rounded-full bg-[#f5f5f5] text-[#444]">
+                      <span className="inline-flex items-center text-xs font-medium px-2.5 py-1 rounded-full bg-[#f5f5f5] text-[#444] whitespace-nowrap">
                         {emp.accessRole ?? "Contributor"}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full ${status.bg} ${status.text}`}
+                        className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap ${status.bg} ${status.text}`}
                       >
                         <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
                         {status.label}
@@ -253,10 +253,10 @@ export default function EmployeesPage() {
                       />
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-sm text-[#666]">{emp.location}</span>
+                      <span className="block text-sm text-[#666] truncate max-w-[9rem]" title={emp.location}>{emp.location || "—"}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-sm text-[#666]">{formatDate(emp.startDate)}</span>
+                      <span className="text-sm text-[#666] whitespace-nowrap tabular-nums">{formatDate(emp.startDate)}</span>
                     </td>
                     <td className="px-4 py-3">
                       <button
@@ -303,47 +303,56 @@ function LoginCell({
   busy: boolean;
   onInvite: () => void;
 }) {
-  if (state === null) return <span className="inline-block w-16 h-4 rounded bg-surface-3 animate-pulse" />;
-  const when = (iso: string | null | undefined) => (iso ? formatDate(iso) : "");
-  const button = (label: string) =>
+  // Taken once per row; "2h ago" doesn't need to tick.
+  const [now] = useState(() => Date.now());
+  if (state === null) return <span className="inline-block w-24 h-6 rounded-full bg-surface-3 animate-pulse" />;
+  // "2h ago", "Nov 22": short enough to sit on the same line as the status.
+  const since = (iso: string | null | undefined) => {
+    if (!iso) return "";
+    const ms = Date.parse(iso);
+    if (!Number.isFinite(ms)) return "";
+    const m = Math.round((now - ms) / 60_000);
+    if (m < 60) return m <= 1 ? "just now" : `${m}m ago`;
+    if (m < 60 * 24) return `${Math.round(m / 60)}h ago`;
+    if (m < 60 * 24 * 7) return `${Math.round(m / 1440)}d ago`;
+    return new Date(ms).toLocaleDateString([], { month: "short", day: "numeric" });
+  };
+  const pill = (tone: string, Icon: typeof CheckCircle2, text: string) => (
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium pl-1.5 pr-2.5 py-1 rounded-full ${tone}`}>
+      <Icon className="w-3.5 h-3.5" /> {text}
+    </span>
+  );
+  const action = (label: string) =>
     canInvite && (
       <button
         onClick={onInvite}
         disabled={busy}
-        className="text-[11px] font-medium text-fg-muted hover:text-fg underline underline-offset-2 disabled:opacity-50"
+        className="inline-flex items-center gap-1.5 text-xs font-medium rounded-lg border border-line bg-surface px-2.5 py-1 text-fg hover:bg-surface-3 hover:border-line-strong transition-colors disabled:opacity-50"
       >
-        {busy ? "Sending…" : label}
+        {busy ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+        {busy ? "Sending" : label}
       </button>
     );
 
-  if (state === "active") {
-    return (
-      <div>
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-tint-green text-ink-green">
-          <span className="w-1.5 h-1.5 rounded-full bg-ink-green" /> Active
-        </span>
-        <p className="text-[11px] text-fg-subtle mt-1">Last in {when(info?.lastSignInAt)}</p>
-      </div>
-    );
-  }
-  if (state === "pending") {
-    return (
-      <div>
-        <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-tint-amber text-ink-amber">
-          <span className="w-1.5 h-1.5 rounded-full bg-ink-amber" /> Pending
-        </span>
-        <p className="text-[11px] text-fg-subtle mt-1 flex items-center gap-2">
-          {info?.invitedAt ? `Invited ${when(info.invitedAt)}` : "Never signed in"} {button("Resend")}
-        </p>
-      </div>
-    );
-  }
   return (
-    <div>
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-surface-3 text-fg-muted">
-        <span className="w-1.5 h-1.5 rounded-full bg-fg-subtle" /> Not invited
-      </span>
-      <p className="text-[11px] mt-1">{button("Send invite")}</p>
+    <div className="flex items-center gap-2 whitespace-nowrap">
+      {state === "active" ? (
+        <>
+          {pill("bg-tint-green text-ink-green", CheckCircle2, "Signed in")}
+          {info?.lastSignInAt && <span className="text-[11px] text-fg-subtle" title={new Date(info.lastSignInAt).toLocaleString()}>{since(info.lastSignInAt)}</span>}
+        </>
+      ) : state === "pending" ? (
+        <>
+          {pill("bg-tint-amber text-ink-amber", Clock, "Invited")}
+          {info?.invitedAt && <span className="text-[11px] text-fg-subtle">{since(info.invitedAt)}</span>}
+          {action("Resend")}
+        </>
+      ) : (
+        <>
+          {pill("bg-surface-3 text-fg-muted", CircleDashed, "No login")}
+          {action("Invite")}
+        </>
+      )}
     </div>
   );
 }

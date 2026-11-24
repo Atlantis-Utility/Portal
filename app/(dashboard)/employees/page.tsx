@@ -202,7 +202,9 @@ export default function EmployeesPage() {
             ) : (
               filtered.map((emp) => {
                 const colors = getAvatarColor(emp.name);
-                const status = statusConfig[emp.status];
+                // A status this page doesn't know (e.g. "Active" written by another
+                // tool) must not take the whole page down.
+                const status = statusConfig[emp.status] ?? statusConfig[String(emp.status ?? "").toLowerCase() as EmployeeStatus] ?? statusConfig.active;
                 return (
                   <tr
                     key={emp.id}

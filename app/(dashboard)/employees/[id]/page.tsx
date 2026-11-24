@@ -122,7 +122,7 @@ export default function EmployeeProfilePage() {
   }
 
   const colors = getAvatarColor(employee.name);
-  const status = statusConfig[employee.status];
+  const status = statusConfig[employee.status] ?? statusConfig[String(employee.status ?? "").toLowerCase() as EmployeeStatus] ?? statusConfig.active;
   const tenure = calculateTenure(employee.startDate);
 
   return (

@@ -91,7 +91,9 @@ function UserAvatar({ name }: { name: string }) {
 // ── Log Row ───────────────────────────────────────────────────────────────────
 
 function LogRow({ entry }: { entry: ActivityLogEntry }) {
-  const cat = CATEGORY_CONFIG[entry.category];
+  // Logs live in the browser, so an old one can carry a category this
+  // version no longer has; it shows as System rather than crashing.
+  const cat = CATEGORY_CONFIG[entry.category] ?? CATEGORY_CONFIG.system;
   const CatIcon = cat.icon;
   const { date, time } = fmtTimestamp(entry.timestamp);
 
@@ -293,7 +295,7 @@ export default function LogsPage() {
             Notifications ({notifCount})
           </button>
           {ALL_CATEGORIES.filter((c) => (catCounts[c] ?? 0) > 0).map((cat) => {
-            const cfg = CATEGORY_CONFIG[cat];
+            const cfg = CATEGORY_CONFIG[cat] ?? CATEGORY_CONFIG.system;
             const CatIcon = cfg.icon;
             const active = catFilter === cat;
             return (

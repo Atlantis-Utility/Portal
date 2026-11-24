@@ -353,6 +353,7 @@ export default function InboxPage() {
                   onToggle={() => setOpen((o) => (o === i.key ? null : i.key))}
                   person={person}
                   extName={extName}
+                  names={names}
                   threadFor={threadFor}
                 />
               ))}
@@ -382,17 +383,45 @@ function Badged({ name, Icon, tone }: { name: string; Icon: typeof Phone; tone: 
 }
 
 const actionBtn = "w-8 h-8 rounded-lg flex items-center justify-center text-fg-muted hover:bg-surface-3 hover:text-fg transition-colors";
-const chip = "inline-flex items-center text-[10.5px] font-medium px-1.5 py-0.5 rounded bg-surface-3 text-fg-muted whitespace-nowrap";
-const rowBase = "group flex items-center gap-3.5 px-5 py-3";
+const rowBase = "group flex items-center gap-3 px-5 py-3";
+
+/*
+ * The right-hand side of every row is the same four fixed columns - the
+ * extension, the actions, the time, the expand arrow - so they line up down
+ * the list whatever a row has in them. (Sized to their content, the tags
+ * wandered left and right with each row's buttons.)
+ */
+
+/** "Ext 100 · Balijinder Singh": the number first, so the column scans. */
+function ExtTag({ ext, names }: { ext: string; names: Record<string, string> }) {
+  return (
+    <span className="hidden lg:flex w-48 shrink-0">
+      {ext && (
+        <span className="inline-flex items-center gap-1 max-w-full text-[11px] px-2 py-0.5 rounded-md bg-surface-3 text-fg-muted" title={names[ext] ? `${names[ext]}, extension ${ext}` : `Extension ${ext}`}>
+          <span className="font-semibold tabular-nums text-fg shrink-0">{ext}</span>
+          {names[ext] && <span className="truncate">· {names[ext]}</span>}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function Actions({ children }: { children?: React.ReactNode }) {
+  return <span className="w-[4.25rem] shrink-0 flex items-center justify-end gap-0.5 md:opacity-0 md:group-hover:opacity-100 transition-opacity">{children}</span>;
+}
+
+const Time = ({ at }: { at: number }) => <span className="w-16 shrink-0 text-right text-xs text-fg-subtle tabular-nums">{clock(at)}</span>;
+const Trail = ({ children }: { children?: React.ReactNode }) => <span className="w-5 shrink-0 flex justify-center">{children}</span>;
 
 function Row({
-  item, open, onToggle, person, extName, threadFor,
+  item, open, onToggle, person, extName, names, threadFor,
 }: {
   item: Item;
   open: boolean;
   onToggle: () => void;
   person: (digits: string) => string;
   extName: (ext: string) => string;
+  names: Record<string, string>;
   threadFor: Map<string, string>;
 }) {
   if (item.kind === "text") {
@@ -409,9 +438,10 @@ function Row({
             </span>
             <span className={`block text-[13px] truncate mt-0.5 ${t.unread ? "text-fg" : "text-fg-muted"}`}>{t.lastMessage || (t.hasMedia ? "Picture" : "")}</span>
           </span>
-          <span className="hidden md:inline-flex"><span className={chip}>{extName(t.user)}</span></span>
-          <span className="w-16 text-right text-xs text-fg-subtle shrink-0 tabular-nums">{clock(item.at)}</span>
-          <ArrowUpRight className="w-4 h-4 text-fg-subtle opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+          <ExtTag ext={t.user} names={names} />
+          <Actions />
+          <Time at={item.at} />
+          <Trail><ArrowUpRight className="w-4 h-4 text-fg-subtle opacity-0 group-hover:opacity-100 transition-opacity" /></Trail>
         </Link>
       </li>
     );
@@ -429,7 +459,8 @@ function Row({
       c.direction === "in" ? (missed ? (c.voicemail ? "Missed call · left a voicemail" : "Missed call") : "Incoming call")
       : c.direction === "out" ? "Outgoing call"
       : "Internal call";
-    const extLabel = c.direction === "out" ? (c.fromName || extName(c.fromExtension)) : c.direction === "in" ? extName(c.toExtension) : "";
+    // Whose extension it was: who rang out, or who it rang.
+    const ourExt = c.direction === "out" ? c.fromExtension : c.direction === "in" ? c.toExtension : c.fromExtension;
     const number = c.direction === "in" ? c.fromNumber : c.direction === "out" ? c.toNumber : "";
     const thread = number ? threadFor.get(number.slice(-10)) : undefined;
     const showNumber = number && c.direction !== "internal" && person(number) !== formatPhone(number);
@@ -442,7 +473,7 @@ function Row({
           <button
             type="button"
             onClick={expandable ? onToggle : undefined}
-            className={`flex items-center gap-3.5 min-w-0 flex-1 text-left ${expandable ? "cursor-pointer" : "cursor-default"}`}
+            className={`flex items-center gap-3 min-w-0 flex-1 text-left ${expandable ? "cursor-pointer" : "cursor-default"}`}
           >
             <Badged
               name={who}
@@ -465,22 +496,26 @@ function Row({
               </span>
             </span>
           </button>
-          {extLabel && <span className="hidden md:inline-flex"><span className={chip}>{extLabel}</span></span>}
-          <span className="flex items-center gap-0.5 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-            {number && c.direction !== "internal" && (
-              <CallLink number={number} name={who} className={actionBtn} tip="Call back"><Phone className="w-4 h-4" /></CallLink>
-            )}
+          <ExtTag ext={ourExt} names={names} />
+          <Actions>
             {thread && (
               <Link href={`/messages?session=${encodeURIComponent(thread)}`} className={actionBtn} data-tip="Open texts"><MessageSquare className="w-4 h-4" /></Link>
             )}
-          </span>
-          <span className="w-16 text-right text-xs text-fg-subtle shrink-0 tabular-nums">{clock(item.at)}</span>
-          {expandable
-            ? <button type="button" onClick={onToggle} aria-label={open ? "Hide call details" : "Show recording and transcript"} className="shrink-0"><ChevronDown className={`w-4 h-4 text-fg-subtle transition-transform ${open ? "rotate-180" : ""}`} /></button>
-            : <span className="w-4 shrink-0" />}
+            {number && c.direction !== "internal" && (
+              <CallLink number={number} name={who} className={actionBtn} tip="Call back"><Phone className="w-4 h-4" /></CallLink>
+            )}
+          </Actions>
+          <Time at={item.at} />
+          <Trail>
+            {expandable && (
+              <button type="button" onClick={onToggle} aria-label={open ? "Hide call details" : "Show recording and transcript"}>
+                <ChevronDown className={`w-4 h-4 text-fg-subtle transition-transform ${open ? "rotate-180" : ""}`} />
+              </button>
+            )}
+          </Trail>
         </div>
         {open && expandable && (
-          <div className="pl-[4.75rem] pr-5 pb-4">
+          <div className="pl-[4.5rem] pr-5 pb-4">
             <CallDetailPanel id={c.id} />
           </div>
         )}
@@ -507,12 +542,13 @@ function Row({
             {v.transcription || <span className="italic text-fg-subtle">No transcription</span>}
           </span>
         </span>
-        <span className="hidden md:inline-flex"><span className={chip}>{extName(v.user)}</span></span>
-        <span className="w-16 text-right text-xs text-fg-subtle shrink-0 tabular-nums">{clock(item.at)}</span>
-        <ChevronDown className={`w-4 h-4 text-fg-subtle shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+        <ExtTag ext={v.user} names={names} />
+        <Actions />
+        <Time at={item.at} />
+        <Trail><ChevronDown className={`w-4 h-4 text-fg-subtle transition-transform ${open ? "rotate-180" : ""}`} /></Trail>
       </button>
       {open && (
-        <div className="pl-[4.75rem] pr-5 pb-4 space-y-3">
+        <div className="pl-[4.5rem] pr-5 pb-4 space-y-3">
           {/* Streams through our server: RingLogix's own link needs no login. */}
           <audio controls autoPlay preload="none" src={audio} className="w-full max-w-lg h-10" />
           <div className="flex flex-wrap items-center gap-2">

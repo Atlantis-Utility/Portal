@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Voicemail as VoicemailIcon, PhoneIncoming, PhoneOutgoing, PhoneMissed, Phone, MessageSquare,
-  RefreshCw, AlertCircle, Search, ChevronDown, ArrowUpRight,
+  RefreshCw, AlertCircle, Search, ChevronDown, ArrowUpRight, Download, Inbox,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import CallLink from "@/components/phone/CallLink";
 import Select from "@/components/ui/Select";
+import { colourFor, initialsFor } from "@/components/messages/Avatar";
 import { usePolling } from "@/lib/use-polling";
 import { formatPhone } from "@/lib/utils";
 import type { SmsConversation } from "@/lib/ringlogix-messages";
@@ -162,6 +163,7 @@ export default function InboxPage() {
     calls: items.filter((i) => i.kind === "call").length,
     missed: items.filter((i) => i.kind === "call" && i.c.direction === "in" && !i.c.answered).length,
     texts: items.filter((i) => i.kind === "text").length,
+    unread: items.filter((i) => i.kind === "text" && i.t.unread).length,
   }), [items]);
 
   const extensions = useMemo(() => {
@@ -207,36 +209,72 @@ export default function InboxPage() {
     { id: "texts", label: "Texts", count: counts.texts },
   ];
 
+  const stats: Array<{ id: Kind; label: string; value: number; hint: string; Icon: typeof Phone; tone: string }> = [
+    { id: "missed", label: "Missed calls", value: counts.missed, hint: "Last 7 days", Icon: PhoneMissed, tone: "bg-tint-rose text-ink-rose" },
+    { id: "vmail", label: "Voicemails", value: counts.vmail, hint: "In every mailbox", Icon: VoicemailIcon, tone: "bg-tint-violet text-ink-violet" },
+    { id: "texts", label: "Unread texts", value: counts.unread, hint: `${counts.texts} conversations`, Icon: MessageSquare, tone: "bg-tint-blue text-ink-blue" },
+    { id: "calls", label: "Calls", value: counts.calls, hint: "Last 7 days", Icon: Phone, tone: "bg-tint-green text-ink-green" },
+  ];
+  const filtered = Boolean(query || ext || kind !== "all");
+
   return (
-    <div>
+    <div className="max-w-6xl">
       <Header
         title="Inbox"
-        subtitle="Voicemail, calls and texts across every extension, newest first."
+        subtitle="Voicemail, calls and texts from every extension in one place."
         actions={
-          <button
-            onClick={() => load()}
-            disabled={refreshing}
-            className="flex items-center gap-2 border border-[#eaeaea] bg-white text-sm font-medium text-[#0a0a0a] px-3.5 py-1.5 rounded-lg hover:bg-[#fafafa] transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} /> Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            {now > 0 && <span className="hidden sm:inline text-xs text-fg-subtle">Updated {clock(now)}</span>}
+            <button
+              onClick={() => load()}
+              disabled={refreshing}
+              className="flex items-center gap-2 border border-line bg-surface text-sm font-medium text-fg px-3.5 py-2 rounded-lg hover:bg-surface-3 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} /> Refresh
+            </button>
+          </div>
         }
       />
 
-      <div className="bg-white border border-[#eaeaea] rounded-xl">
-        <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[#eaeaea]">
-          <div className="flex items-center gap-1 overflow-x-auto -mx-1 px-1 max-w-full">
+      {/* At a glance; each card is also a shortcut to its filter. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        {stats.map((st) => (
+          <button
+            key={st.id}
+            onClick={() => setKind(kind === st.id ? "all" : st.id)}
+            className={`text-left bg-surface border rounded-xl p-4 transition-all hover:shadow-sm ${
+              kind === st.id ? "border-fg ring-1 ring-fg" : "border-line hover:border-line-strong"
+            }`}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[13px] font-medium text-fg-muted">{st.label}</span>
+              <span className={`w-8 h-8 rounded-lg flex items-center justify-center ${st.tone}`}><st.Icon className="w-4 h-4" /></span>
+            </div>
+            <p className="text-2xl font-semibold text-fg tabular-nums leading-none">
+              {state === "ok" ? st.value : <span className="inline-block w-8 h-6 rounded bg-surface-3 animate-pulse align-middle" />}
+            </p>
+            <p className="text-[11px] text-fg-subtle mt-1.5">{st.hint}</p>
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-surface border border-line rounded-xl overflow-hidden">
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-line">
+          <div className="flex items-center p-0.5 rounded-lg bg-surface-3 overflow-x-auto max-w-full">
             {tabs.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setKind(t.id)}
-                className={`shrink-0 flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-lg transition-colors ${
-                  kind === t.id ? "bg-[#0a0a0a] text-white" : "text-[#666] hover:bg-[#f5f5f5] hover:text-[#0a0a0a]"
+                className={`shrink-0 flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-md transition-colors ${
+                  kind === t.id ? "bg-surface text-fg shadow-sm" : "text-fg-muted hover:text-fg"
                 }`}
               >
                 {t.label}
                 {t.count !== undefined && state === "ok" && (
-                  <span className={`text-[11px] tabular-nums ${kind === t.id ? "text-white/70" : "text-[#999]"}`}>{t.count}</span>
+                  <span className={`text-[10.5px] tabular-nums px-1.5 rounded-full ${
+                    t.id === "missed" && t.count ? "bg-tint-rose text-ink-rose" : kind === t.id ? "bg-surface-3 text-fg-muted" : "text-fg-subtle"
+                  }`}>{t.count}</span>
                 )}
               </button>
             ))}
@@ -245,56 +283,67 @@ export default function InboxPage() {
             <Select
               value={ext}
               onChange={setExt}
-              className="w-44 shrink-0"
+              className="w-48 shrink-0"
               options={[{ value: "", label: "All extensions" }, ...extensions.map((e) => ({ value: e, label: extName(e) }))]}
             />
-            <div className="relative flex-1 sm:w-60">
-              <Search className="w-3.5 h-3.5 text-[#999] absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <div className="relative flex-1 sm:w-64">
+              <Search className="w-3.5 h-3.5 text-fg-subtle absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Name, number or words"
-                className="w-full text-sm border border-[#eaeaea] rounded-lg pl-8 pr-3 py-1.5 outline-none focus:border-[#0a0a0a] transition-colors"
+                placeholder="Search name, number or words"
+                className="w-full text-sm bg-surface border border-line rounded-lg pl-8.5 pr-3 py-2 text-fg placeholder:text-fg-subtle outline-none focus:border-fg transition-colors"
               />
             </div>
           </div>
         </div>
 
         {data && data.unavailable.length > 0 && (
-          <div className="px-4 py-2 text-xs text-[#666] bg-[#fafafa] border-b border-[#eaeaea] flex items-center gap-2">
-            <AlertCircle className="w-3.5 h-3.5 text-[#f5a524]" />
+          <div className="px-4 py-2 text-xs text-ink-amber bg-tint-amber border-b border-line flex items-center gap-2">
+            <AlertCircle className="w-3.5 h-3.5" />
             Couldn&apos;t load {data.unavailable.join(" or ")} just now; showing the rest.
           </div>
         )}
 
         {state === "loading" && (
-          <div className="p-12 text-center">
-            <RefreshCw className="w-6 h-6 animate-spin text-[#999] mx-auto mb-3" />
-            <p className="text-sm text-[#666]">Reading every extension&apos;s voicemail and calls…</p>
-            <p className="text-xs text-[#999] mt-1">The first load takes a few seconds.</p>
-          </div>
+          <ul className="divide-y divide-line">
+            {Array.from({ length: 7 }).map((_, i) => (
+              <li key={i} className="flex items-center gap-3.5 px-5 py-3.5">
+                <span className="w-10 h-10 rounded-full bg-surface-3 animate-pulse shrink-0" />
+                <span className="flex-1 space-y-2">
+                  <span className="block h-3 w-40 rounded bg-surface-3 animate-pulse" />
+                  <span className="block h-2.5 w-64 max-w-full rounded bg-surface-3 animate-pulse" />
+                </span>
+                <span className="h-2.5 w-12 rounded bg-surface-3 animate-pulse" />
+              </li>
+            ))}
+            <li className="px-5 py-3 text-xs text-fg-subtle text-center">Reading every extension&apos;s voicemail and calls. The first load takes a few seconds.</li>
+          </ul>
         )}
 
         {state === "error" && (
-          <div className="p-12 text-center">
-            <AlertCircle className="w-6 h-6 text-[#f31260] mx-auto mb-3" />
-            <p className="text-sm font-medium text-[#0a0a0a] mb-1">Couldn&apos;t load the inbox</p>
-            <p className="text-xs text-[#999] mb-4">{error}</p>
-            <button onClick={() => load()} className="text-xs text-[#0070f3] hover:underline">Retry</button>
+          <div className="py-16 px-6 text-center">
+            <span className="w-12 h-12 rounded-full bg-tint-rose text-ink-rose flex items-center justify-center mx-auto mb-3"><AlertCircle className="w-5 h-5" /></span>
+            <p className="text-sm font-semibold text-fg mb-1">Couldn&apos;t load the inbox</p>
+            <p className="text-xs text-fg-subtle mb-4">{error}</p>
+            <button onClick={() => load()} className="text-xs font-medium border border-line rounded-lg px-3 py-1.5 text-fg hover:bg-surface-3">Try again</button>
           </div>
         )}
 
         {state === "ok" && shown.length === 0 && (
-          <div className="p-12 text-center">
-            <VoicemailIcon className="w-6 h-6 text-[#999] mx-auto mb-3" />
-            <p className="text-sm text-[#999]">Nothing here{query || ext || kind !== "all" ? " for that filter" : ""}.</p>
+          <div className="py-16 px-6 text-center">
+            <span className="w-12 h-12 rounded-full bg-surface-3 text-fg-subtle flex items-center justify-center mx-auto mb-3"><Inbox className="w-5 h-5" /></span>
+            <p className="text-sm font-semibold text-fg mb-1">{filtered ? "Nothing matches" : "All caught up"}</p>
+            <p className="text-xs text-fg-subtle">{filtered ? "Try a different filter or search." : "New voicemail, calls and texts will show up here."}</p>
           </div>
         )}
 
         {state === "ok" && groups.map((g) => (
-          <div key={g.day}>
-            <p className="px-4 pt-4 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#999]">{g.day}</p>
-            <ul className="divide-y divide-[#f4f4f4]">
+          <section key={g.day}>
+            <h3 className="px-5 py-2 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle bg-surface-3 border-b border-line">
+              {g.day} <span className="font-normal normal-case tracking-normal">· {g.rows.length}</span>
+            </h3>
+            <ul className="divide-y divide-line">
               {g.rows.map((i) => (
                 <Row
                   key={i.key}
@@ -307,17 +356,33 @@ export default function InboxPage() {
                 />
               ))}
             </ul>
-          </div>
+          </section>
         ))}
         {state === "ok" && shown.length > 0 && (
-          <p className="px-4 py-3 text-[11px] text-[#bbb] border-t border-[#f4f4f4]">
-            Calls cover the last 7 days. Voicemail is every extension&apos;s current box.
+          <p className="px-5 py-3 text-[11px] text-fg-subtle border-t border-line">
+            Showing {shown.length} item{shown.length === 1 ? "" : "s"}. Calls cover the last 7 days; voicemail is each extension&apos;s current mailbox.
           </p>
         )}
       </div>
     </div>
   );
 }
+
+/** A person's circle, with what kind of item it is badged in the corner. */
+function Badged({ name, Icon, tone }: { name: string; Icon: typeof Phone; tone: string }) {
+  return (
+    <span className="relative shrink-0">
+      <span className={`w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-semibold ${colourFor(name)}`}>{initialsFor(name)}</span>
+      <span className={`absolute -bottom-0.5 -right-0.5 w-4.5 h-4.5 rounded-full ring-2 ring-surface flex items-center justify-center ${tone}`}>
+        <Icon className="w-2.5 h-2.5" />
+      </span>
+    </span>
+  );
+}
+
+const actionBtn = "w-8 h-8 rounded-lg flex items-center justify-center text-fg-muted hover:bg-surface-3 hover:text-fg transition-colors";
+const chip = "inline-flex items-center text-[10.5px] font-medium px-1.5 py-0.5 rounded bg-surface-3 text-fg-muted whitespace-nowrap";
+const rowBase = "group flex items-center gap-3.5 px-5 py-3";
 
 function Row({
   item, open, onToggle, person, extName, threadFor,
@@ -329,27 +394,23 @@ function Row({
   extName: (ext: string) => string;
   threadFor: Map<string, string>;
 }) {
-  const base = "flex items-start gap-3 px-4 py-3";
-  const iconBox = "mt-0.5 w-8 h-8 shrink-0 rounded-full flex items-center justify-center";
-
   if (item.kind === "text") {
     const t = item.t;
     const who = t.name || (t.isGroup ? t.remoteNumbers.map(person).join(", ") : t.remoteExtension ? extName(t.remoteExtension) : person(t.remoteNumbers[0] ?? t.remote));
     return (
       <li>
-        <Link href={`/messages?session=${encodeURIComponent(t.sessionId)}`} className={`${base} hover:bg-[#fafafa] transition-colors group`}>
-          <span className={`${iconBox} bg-tint-blue text-ink-blue`}><MessageSquare className="w-4 h-4" /></span>
+        <Link href={`/messages?session=${encodeURIComponent(t.sessionId)}`} className={`${rowBase} hover:bg-surface-3 transition-colors`}>
+          <Badged name={who} Icon={MessageSquare} tone="bg-tint-blue text-ink-blue" />
           <span className="min-w-0 flex-1">
-            <span className={`flex items-center gap-1.5 text-sm truncate ${t.unread ? "font-semibold text-[#0a0a0a]" : "text-[#0a0a0a]"}`}>
-              <span className="truncate">{who}</span>
-              {t.unread && <span className="w-1.5 h-1.5 rounded-full bg-[#0070f3] shrink-0" />}
+            <span className="flex items-center gap-2">
+              <span className={`text-sm truncate text-fg ${t.unread ? "font-semibold" : "font-medium"}`}>{who}</span>
+              {t.unread && <span className="w-2 h-2 rounded-full bg-[#0070f3] shrink-0" aria-label="Unread" />}
             </span>
-            <span className="block text-[13px] text-[#666] truncate">{t.lastMessage || (t.hasMedia ? "Picture" : "")}</span>
-            <span className="block text-[11px] text-[#999] mt-0.5">Text · {extName(t.user)}</span>
+            <span className={`block text-[13px] truncate mt-0.5 ${t.unread ? "text-fg" : "text-fg-muted"}`}>{t.lastMessage || (t.hasMedia ? "Picture" : "")}</span>
           </span>
-          <span className="text-[11px] text-[#999] shrink-0 flex items-center gap-1">
-            {clock(item.at)} <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </span>
+          <span className="hidden md:inline-flex"><span className={chip}>{extName(t.user)}</span></span>
+          <span className="w-16 text-right text-xs text-fg-subtle shrink-0 tabular-nums">{clock(item.at)}</span>
+          <ArrowUpRight className="w-4 h-4 text-fg-subtle opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
         </Link>
       </li>
     );
@@ -362,35 +423,40 @@ function Row({
     const who =
       c.direction === "in" ? (person(c.fromNumber) !== formatPhone(c.fromNumber) ? person(c.fromNumber) : c.fromName || person(c.fromNumber))
       : c.direction === "out" ? person(c.toNumber)
-      : `${c.fromName || extName(c.fromExtension)} → ${extName(c.toExtension)}`;
+      : [c.fromName || extName(c.fromExtension), extName(c.toExtension)].filter(Boolean).join(" → ") || "Internal call";
     const detail =
-      c.direction === "in"
-        ? `${missed ? (c.voicemail ? "Missed, left voicemail" : "Missed") : "Incoming"}${c.toExtension ? ` · ${extName(c.toExtension)}` : ""}`
-        : c.direction === "out"
-          ? `Outgoing · ${c.fromName || extName(c.fromExtension)}`
-          : "Internal";
+      c.direction === "in" ? (missed ? (c.voicemail ? "Missed call · left a voicemail" : "Missed call") : "Incoming call")
+      : c.direction === "out" ? "Outgoing call"
+      : "Internal call";
+    const extLabel = c.direction === "out" ? (c.fromName || extName(c.fromExtension)) : c.direction === "in" ? extName(c.toExtension) : "";
     const number = c.direction === "in" ? c.fromNumber : c.direction === "out" ? c.toNumber : "";
     const thread = number ? threadFor.get(number.slice(-10)) : undefined;
+    const showNumber = number && c.direction !== "internal" && person(number) !== formatPhone(number);
     return (
-      <li className={base}>
-        <span className={`${iconBox} ${missed ? "bg-tint-rose text-ink-rose" : "bg-[#f5f5f5] text-[#666]"}`}><Icon className="w-4 h-4" /></span>
+      <li className={`${rowBase} hover:bg-surface-3 transition-colors`}>
+        <Badged
+          name={who}
+          Icon={Icon}
+          tone={missed ? "bg-tint-rose text-ink-rose" : c.direction === "out" ? "bg-tint-green text-ink-green" : "bg-tint-slate text-ink-slate"}
+        />
         <span className="min-w-0 flex-1">
-          <span className={`block text-sm truncate ${missed ? "text-[#f31260] font-medium" : "text-[#0a0a0a]"}`}>{who}</span>
-          <span className="block text-[11px] text-[#999] mt-0.5">
+          <span className={`block text-sm truncate font-medium ${missed ? "text-ink-rose" : "text-fg"}`}>{who}</span>
+          <span className="block text-[13px] text-fg-muted truncate mt-0.5">
             {detail}
             {c.talkSec && c.answered ? ` · ${duration(c.talkSec)}` : ""}
-            {number && c.direction !== "internal" && person(number) !== formatPhone(number) ? ` · ${formatPhone(number)}` : ""}
+            {showNumber ? ` · ${formatPhone(number)}` : ""}
           </span>
         </span>
-        <span className="text-[11px] text-[#999] shrink-0 flex flex-col items-end gap-1">
-          {clock(item.at)}
-          <span className="flex items-center gap-2">
-            {number && c.direction !== "internal" && (
-              <CallLink number={number} name={who} className="text-[#0070f3] hover:underline">Call</CallLink>
-            )}
-            {thread && <Link href={`/messages?session=${encodeURIComponent(thread)}`} className="text-[#0070f3] hover:underline">Text</Link>}
-          </span>
+        {extLabel && <span className="hidden md:inline-flex"><span className={chip}>{extLabel}</span></span>}
+        <span className="flex items-center gap-0.5 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+          {number && c.direction !== "internal" && (
+            <CallLink number={number} name={who} className={actionBtn} tip="Call back"><Phone className="w-4 h-4" /></CallLink>
+          )}
+          {thread && (
+            <Link href={`/messages?session=${encodeURIComponent(thread)}`} className={actionBtn} data-tip="Open texts"><MessageSquare className="w-4 h-4" /></Link>
+          )}
         </span>
+        <span className="w-16 text-right text-xs text-fg-subtle shrink-0 tabular-nums">{clock(item.at)}</span>
       </li>
     );
   }
@@ -402,33 +468,41 @@ function Row({
   const thread = v.fromNumber ? threadFor.get(v.fromNumber.slice(-10)) : undefined;
   const audio = `/api/inbox/voicemail?${new URLSearchParams({ user: v.user, id: v.id })}`;
   return (
-    <li>
-      <button onClick={onToggle} className={`${base} w-full text-left hover:bg-[#fafafa] transition-colors`}>
-        <span className={`${iconBox} bg-tint-violet text-ink-violet`}><VoicemailIcon className="w-4 h-4" /></span>
+    <li className={open ? "bg-surface-3" : ""}>
+      <button onClick={onToggle} className={`${rowBase} w-full text-left hover:bg-surface-3 transition-colors`}>
+        <Badged name={who} Icon={VoicemailIcon} tone="bg-tint-violet text-ink-violet" />
         <span className="min-w-0 flex-1">
-          <span className="block text-sm text-[#0a0a0a] truncate">{who}</span>
-          <span className={`block text-[13px] text-[#666] ${open ? "" : "truncate"}`}>
-            {v.transcription || <span className="italic text-[#999]">No transcription</span>}
+          <span className="flex items-center gap-2">
+            <span className="text-sm font-medium text-fg truncate">{who}</span>
+            {v.durationSec ? <span className="text-[11px] text-fg-subtle tabular-nums shrink-0">{duration(v.durationSec)}</span> : null}
           </span>
-          <span className="block text-[11px] text-[#999] mt-0.5">
-            Voicemail · {extName(v.user)}{v.durationSec ? ` · ${duration(v.durationSec)}` : ""}
-            {v.fromNumber && person(v.fromNumber) !== formatPhone(v.fromNumber) ? ` · ${formatPhone(v.fromNumber)}` : ""}
+          <span className={`block text-[13px] text-fg-muted mt-0.5 ${open ? "" : "truncate"}`}>
+            {v.transcription || <span className="italic text-fg-subtle">No transcription</span>}
           </span>
         </span>
-        <span className="text-[11px] text-[#999] shrink-0 flex items-center gap-1">
-          {clock(item.at)} <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
-        </span>
+        <span className="hidden md:inline-flex"><span className={chip}>{extName(v.user)}</span></span>
+        <span className="w-16 text-right text-xs text-fg-subtle shrink-0 tabular-nums">{clock(item.at)}</span>
+        <ChevronDown className={`w-4 h-4 text-fg-subtle shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="pl-15 pr-4 pb-4 -mt-1 space-y-2">
+        <div className="pl-[4.75rem] pr-5 pb-4 space-y-3">
           {/* Streams through our server: RingLogix's own link needs no login. */}
-          <audio controls autoPlay preload="none" src={audio} className="w-full max-w-md h-9" />
-          <div className="flex items-center gap-3 text-xs">
-            <a href={audio} download className="text-[#0070f3] hover:underline">Download</a>
+          <audio controls autoPlay preload="none" src={audio} className="w-full max-w-lg h-10" />
+          <div className="flex flex-wrap items-center gap-2">
             {v.fromNumber && !v.fromExtension && (
-              <CallLink number={v.fromNumber} name={who} className="text-[#0070f3] hover:underline">Call back</CallLink>
+              <CallLink number={v.fromNumber} name={who} className="inline-flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 bg-fg text-surface hover:opacity-90">
+                <Phone className="w-3.5 h-3.5" /> Call back
+              </CallLink>
             )}
-            {thread && <Link href={`/messages?session=${encodeURIComponent(thread)}`} className="text-[#0070f3] hover:underline">Text them</Link>}
+            {thread && (
+              <Link href={`/messages?session=${encodeURIComponent(thread)}`} className="inline-flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 border border-line bg-surface text-fg hover:bg-surface-3">
+                <MessageSquare className="w-3.5 h-3.5" /> Text them
+              </Link>
+            )}
+            <a href={audio} download className="inline-flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 border border-line bg-surface text-fg hover:bg-surface-3">
+              <Download className="w-3.5 h-3.5" /> Download
+            </a>
+            {v.fromNumber && <span className="text-xs text-fg-subtle tabular-nums ml-1">{formatPhone(v.fromNumber) || v.fromNumber}</span>}
           </div>
         </div>
       )}

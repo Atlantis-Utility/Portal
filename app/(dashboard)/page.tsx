@@ -103,7 +103,17 @@ export default function DashboardPage() {
   const [now] = useState(() => Date.now());
   const [cards, setCards] = useState<KanbanCard[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [threads, setThreads] = useState<{ list: SmsConversation[]; names: Record<string, string>; contacts: Record<string, { name: string }> } | null>(null);
+  // Starts from the copy Messages keeps in this tab (sc:inbox-v1), so the
+  // list paints at once; the fetch below brings it up to date.
+  const [threads, setThreads] = useState<{ list: SmsConversation[]; names: Record<string, string>; contacts: Record<string, { name: string }> } | null>(() => {
+    try {
+      const raw = typeof window === "undefined" ? null : sessionStorage.getItem("sc:inbox-v1");
+      const c = raw ? JSON.parse(raw) : null;
+      return c && Array.isArray(c.conversations) ? { list: c.conversations, names: c.names ?? {}, contacts: c.contacts ?? {} } : null;
+    } catch {
+      return null;
+    }
+  });
   const [adding, setAdding] = useState(false);
   const [completing, setCompleting] = useState<string | null>(null);
 
@@ -118,6 +128,9 @@ export default function DashboardPage() {
       .then((b) => {
         if (!live || !b) return;
         setThreads({ list: b.conversations ?? [], names: b.names ?? {}, contacts: b.contacts ?? {} });
+        try {
+          sessionStorage.setItem("sc:inbox-v1", JSON.stringify({ conversations: b.conversations ?? [], names: b.names ?? {}, contacts: b.contacts ?? {}, senders: b.senders ?? [] }));
+        } catch { /* only costs the instant paint next time */ }
       })
       .catch(() => {});
     return () => { live = false; };

@@ -239,7 +239,14 @@ function pbxApi(
     : CONTACT_OBJECTS.has(object) ? RL_CONTACT_TTL
     : INBOX_OBJECTS.has(object) ? RL_INBOX_TTL
     : RL_TTL;
-  return withCache(`rl:${object}:${action}:${paramStr}`, ttl, doFetch);
+  // How long past its TTL an answer may still be served while a fresh one
+  // loads behind it (lib/server-cache.ts). Never for messages, which must be
+  // current; generously for contact books, mailboxes and the like, which
+  // change rarely and are slow to read in full.
+  const staleMs = LIVE_OBJECTS.has(object) ? 0
+    : INBOX_OBJECTS.has(object) ? 10 * 60_000
+    : 30 * 60_000;
+  return withCache(`rl:${object}:${action}:${paramStr}`, ttl, doFetch, staleMs);
 }
 
 // Domains = customer accounts in reseller context

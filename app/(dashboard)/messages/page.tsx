@@ -694,7 +694,7 @@ function SaveContact({
  * and the sending number rather than trusting either.
  */
 function NewMessage({
-  senders, domain, suggestions, onClose, onSent,
+  senders, domain, suggestions, onClose, onSent, initialTo = "",
 }: {
   senders: Array<{ number: string; user: string }>;
   domain: string;
@@ -702,10 +702,12 @@ function NewMessage({
   suggestions: Array<{ number: string; label: string; from: string; kind?: "number" | "extension" }>;
   onClose: () => void;
   onSent: (sessionId: string) => void;
+  /** A number to start with, from a "Text" button elsewhere (?to=). */
+  initialTo?: string;
 }) {
   const toast = useToast();
   const confirm = useConfirm();
-  const [to, setTo] = useState("");
+  const [to, setTo] = useState(initialTo);
   const [from, setFrom] = useState(senders[0]?.number ?? "");
   const [text, setText] = useState("");
   const [groupName, setGroupName] = useState("");
@@ -1178,6 +1180,12 @@ export default function MessagesPage() {
     typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("session") ?? "",
   );
   const [selected, setSelected] = useState(linked);
+  // `?to=<number>` (the Text button on Contacts): their conversation if we
+  // have one, otherwise a new message to them, decided once the list is in.
+  const [linkedTo] = useState(() =>
+    typeof window === "undefined" ? "" : (new URLSearchParams(window.location.search).get("to") ?? "").replace(/\D/g, ""),
+  );
+  const [toHandled, setToHandled] = useState(false);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [showDetails, setShowDetails] = useState(true);
@@ -1192,6 +1200,14 @@ export default function MessagesPage() {
   // moves to it; a back arrow returns.
   const [pane, setPane] = useState<"list" | "thread">(linked ? "thread" : "list");
   const [composing, setComposing] = useState(false);
+  if (linkedTo && !toHandled && (conversations.length > 0 || state === "ok")) {
+    setToHandled(true);
+    const key = linkedTo.slice(-10);
+    const existing = conversations.find((c) => !c.isGroup && (c.remoteNumbers[0] ?? c.remote).slice(-10) === key);
+    if (existing) setSelected(existing.sessionId);
+    else setComposing(true);
+    setPane("thread");
+  }
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [senders, setSenders] = useState<Array<{ number: string; user: string }>>(cached?.senders ?? []);
@@ -1627,6 +1643,7 @@ export default function MessagesPage() {
             >
               {composing ? (
                 <NewMessage
+                  initialTo={toHandled && linkedTo ? (formatPhone(linkedTo) || linkedTo) : ""}
                   senders={senders}
                   domain={conversations[0]?.domain ?? ""}
                   suggestions={suggestions}

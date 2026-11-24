@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getContacts, createContact, deleteContact, isConfigured, invalidateRinglogixCache } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
 import { readAllBooks } from "@/lib/contact-books";
-import { requireEmployee, ApiAuthError } from "@/lib/api-auth";
+import { requireAdmin, requireEmployee, ApiAuthError } from "@/lib/api-auth";
 
 /**
  * These three had no guard on them at all: anybody who could reach the
@@ -94,7 +94,9 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   if (!isConfigured()) return NextResponse.json({ error: "not_configured" }, { status: 503 });
   try {
-    await requireEmployee();
+    // Administrators only: a contact book is shared with every phone on
+    // that extension (or all of them, for the shared book).
+    await requireAdmin();
     const body = await req.json();
     const data = await deleteContact(await tenantDomain(), body.user, body.first_name, body.last_name, body.contact_id);
     return NextResponse.json(data);

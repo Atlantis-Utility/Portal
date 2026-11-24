@@ -10,7 +10,9 @@ import StatCard from "@/components/ui/StatCard";
 import CallLink from "@/components/phone/CallLink";
 import { colourFor, initialsFor } from "@/components/messages/Avatar";
 import ExportMenu from "@/components/ui/ExportMenu";
-import { BookUser, Mail, Smartphone, Phone, RefreshCw, AlertCircle, Plus, X, Trash2 } from "lucide-react";
+import { BookUser, Mail, Smartphone, Phone, RefreshCw, AlertCircle, Plus, X, Trash2, MessageSquare } from "lucide-react";
+import Link from "next/link";
+import { useAuth } from "@/lib/auth-context";
 
 import { formatPhone } from "@/lib/utils";
 interface Contact {
@@ -58,6 +60,7 @@ export default function ContactsPage() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [showTests, setShowTests] = useState(false);
+  const isAdmin = Boolean(useAuth().authUser?.isAdmin);
 
   // The domain is always ours: the route fills it in, as Messages does.
   // The ERP picked from every reseller customer's domain, through a
@@ -290,7 +293,7 @@ export default function ContactsPage() {
           <div className="overflow-x-auto">
             <div className="min-w-[44rem]">
               {/* One line per contact. */}
-              <div className="grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1.6fr)_4.5rem] gap-4 px-5 py-2.5 border-b border-line bg-surface-2 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
+              <div className="grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1.6fr)_6.5rem] gap-4 px-5 py-2.5 border-b border-line bg-surface-2 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
                 <span>Name</span><span>Company</span><span>Phone</span><span>Email</span><span />
               </div>
               <ul className="divide-y divide-line">
@@ -300,7 +303,7 @@ export default function ContactsPage() {
                   const [primaryLabel, primary] = phones[0] ?? ["", ""];
                   const book = !c.user || c.user === "*" ? "Shared" : `Ext ${c.user}`;
                   return (
-                    <li key={(c.contact_id ?? "") + i} className="group grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1.6fr)_4.5rem] gap-4 items-center px-5 py-2.5 hover:bg-surface-3 transition-colors">
+                    <li key={(c.contact_id ?? "") + i} className="group grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1.6fr)_6.5rem] gap-4 items-center px-5 py-2.5 hover:bg-surface-3 transition-colors">
                       <span className="flex items-center gap-2.5 min-w-0">
                         <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 ${colourFor(name)}`}>{initialsFor(name)}</span>
                         <span className="text-sm font-medium text-fg truncate">{name}</span>
@@ -323,18 +326,29 @@ export default function ContactsPage() {
                       <span className="text-sm text-fg-muted truncate">{c.email ? <a href={`mailto:${c.email}`} className="hover:text-fg hover:underline">{c.email}</a> : "—"}</span>
                       <span className="flex items-center justify-end gap-0.5">
                         {primary && (
+                          <Link
+                            href={`/messages?to=${encodeURIComponent(primary.replace(/\D/g, ""))}`}
+                            data-tip={`Text ${name}`}
+                            aria-label={`Text ${name}`}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-fg-subtle hover:bg-tint-blue hover:text-ink-blue transition-colors"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </Link>
+                        )}
+                        {primary && (
                           <CallLink number={primary} name={name} tip={`Call ${name}`} className="w-8 h-8 rounded-lg flex items-center justify-center text-fg-subtle hover:bg-tint-green hover:text-ink-green transition-colors">
                             <Phone className="w-3.5 h-3.5" />
                           </CallLink>
                         )}
-                        <button
+                        {/* Only administrators remove contacts: the books are shared with every phone. */}
+                        {isAdmin && <button
                           onClick={() => deleteContact(c)}
                           className="w-8 h-8 rounded-lg flex items-center justify-center text-fg-subtle opacity-0 group-hover:opacity-100 hover:text-[#f31260] hover:bg-[#fff0f3] transition-all"
                           data-tip="Delete contact"
                           aria-label={`Delete ${name}`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        </button>}
                       </span>
                     </li>
                   );

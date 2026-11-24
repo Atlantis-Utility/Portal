@@ -45,6 +45,12 @@ function ago(ms: number, now: number) {
   return new Date(ms).toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+/** The note colours from the Notes board, as card tints. */
+const NOTE_TINT: Record<string, string> = {
+  amber: "bg-tint-amber", green: "bg-tint-green", blue: "bg-tint-blue",
+  violet: "bg-tint-violet", pink: "bg-tint-pink", teal: "bg-tint-teal",
+};
+
 function Panel({
   title, href, icon, tone, count, children, action,
 }: {
@@ -57,7 +63,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="bg-surface border border-line rounded-2xl overflow-hidden">
+    <section className="bg-surface border border-line rounded-2xl overflow-hidden flex flex-col h-full">
       <header className="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-line">
         <div className="flex items-center gap-2.5 min-w-0">
           <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${tone}`}>{icon}</span>
@@ -75,7 +81,7 @@ function Panel({
           )}
         </div>
       </header>
-      {children}
+      <div className="flex-1 min-h-[12rem] max-h-[22rem] overflow-y-auto">{children}</div>
     </section>
   );
 }
@@ -268,9 +274,10 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
-        {/* ── Left: what needs doing ── */}
-        <div className="lg:col-span-2 space-y-5">
+      {/* Two even columns: what needs a reply and the calls beside it, your
+          tasks and today's schedule beside them, then recent notes. Panels
+          in a row share a height; long lists scroll inside their panel. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {show("messages") && canMessages && (
             <Panel title="Needs a reply" href="/messages" icon={<MessageSquare className="w-4 h-4" />} tone="bg-tint-blue text-ink-blue" count={waiting.length}>
               {!threads ? (
@@ -312,69 +319,6 @@ export default function DashboardPage() {
               )}
             </Panel>
           )}
-
-          {show("work") && canTasks && (
-            <Panel
-              title="My tasks"
-              href="/tasks"
-              icon={<CheckSquare className="w-4 h-4" />}
-              tone="bg-tint-violet text-ink-violet"
-              count={mine.length}
-              action={
-                <button type="button" onClick={() => setAdding(true)} className="w-7 h-7 rounded-lg flex items-center justify-center text-fg-muted hover:bg-surface-3 hover:text-fg" aria-label="New task" title="New task">
-                  <Plus className="w-4 h-4" />
-                </button>
-              }
-            >
-              {mine.length === 0 ? (
-                <Empty icon={CheckSquare} text="Nothing assigned to you." />
-              ) : (
-                <ul className="divide-y divide-line">
-                  {mine.slice(0, 6).map((c) => {
-                    const late = !c.dueDateTbd && c.dueDate && c.dueDate < today;
-                    const isToday = c.dueDate === today;
-                    return (
-                      <li key={c.id} className="flex items-center gap-3 px-5 py-2.5">
-                        {/* Tick it off from here. */}
-                        <button
-                          type="button"
-                          onClick={() => complete(c)}
-                          disabled={completing === c.id}
-                          aria-label={`Mark "${c.title}" done`}
-                          title="Mark done"
-                          className="group w-5 h-5 rounded-md border-2 border-line-strong hover:border-ink-green hover:bg-tint-green flex items-center justify-center shrink-0 transition-colors"
-                        >
-                          <Check className="w-3 h-3 text-ink-green opacity-0 group-hover:opacity-100" />
-                        </button>
-                        <Link href="/tasks" className="min-w-0 flex-1">
-                          <span className="block text-sm text-fg truncate">{c.title}</span>
-                          <span className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[11px] text-fg-subtle capitalize">{c.column.replace("-", " ")}</span>
-                            {(c.tags ?? []).length > 0 && <TagChips tags={c.tags} max={2} />}
-                          </span>
-                        </Link>
-                        <span className={`text-[11px] font-medium shrink-0 px-2 py-0.5 rounded-full ${
-                          late ? "bg-tint-rose text-ink-rose" : isToday ? "bg-tint-amber text-ink-amber" : "text-fg-subtle"
-                        }`}>
-                          {c.dueDateTbd || !c.dueDate ? "No date" : late ? "Overdue" : isToday ? "Today" : new Date(`${c.dueDate}T12:00`).toLocaleDateString([], { month: "short", day: "numeric" })}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </Panel>
-          )}
-
-          {show("schedule") && (
-            <Panel title="Today" href="/calendar" icon={<CalendarDays className="w-4 h-4" />} tone="bg-tint-amber text-ink-amber">
-              <div className="p-5"><TodaySchedule cards={cards} /></div>
-            </Panel>
-          )}
-        </div>
-
-        {/* ── Right: calls and what's written down ── */}
-        <div className="space-y-5">
           {phone && (
             <Panel
               title="Calls & voicemail"
@@ -427,22 +371,84 @@ export default function DashboardPage() {
               )}
             </Panel>
           )}
-
+          {show("work") && canTasks && (
+            <Panel
+              title="My tasks"
+              href="/tasks"
+              icon={<CheckSquare className="w-4 h-4" />}
+              tone="bg-tint-violet text-ink-violet"
+              count={mine.length}
+              action={
+                <button type="button" onClick={() => setAdding(true)} className="w-7 h-7 rounded-lg flex items-center justify-center text-fg-muted hover:bg-surface-3 hover:text-fg" aria-label="New task" title="New task">
+                  <Plus className="w-4 h-4" />
+                </button>
+              }
+            >
+              {mine.length === 0 ? (
+                <Empty icon={CheckSquare} text="Nothing assigned to you." />
+              ) : (
+                <ul className="divide-y divide-line">
+                  {mine.slice(0, 6).map((c) => {
+                    const late = !c.dueDateTbd && c.dueDate && c.dueDate < today;
+                    const isToday = c.dueDate === today;
+                    return (
+                      <li key={c.id} className="flex items-center gap-3 px-5 py-2.5">
+                        {/* Tick it off from here. */}
+                        <button
+                          type="button"
+                          onClick={() => complete(c)}
+                          disabled={completing === c.id}
+                          aria-label={`Mark "${c.title}" done`}
+                          title="Mark done"
+                          className="group w-5 h-5 rounded-md border-2 border-line-strong hover:border-ink-green hover:bg-tint-green flex items-center justify-center shrink-0 transition-colors"
+                        >
+                          <Check className="w-3 h-3 text-ink-green opacity-0 group-hover:opacity-100" />
+                        </button>
+                        <Link href="/tasks" className="min-w-0 flex-1">
+                          <span className="block text-sm text-fg truncate">{c.title}</span>
+                          <span className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[11px] text-fg-subtle capitalize">{c.column.replace("-", " ")}</span>
+                            {(c.tags ?? []).length > 0 && <TagChips tags={c.tags} max={2} />}
+                          </span>
+                        </Link>
+                        <span className={`text-[11px] font-medium shrink-0 px-2 py-0.5 rounded-full ${
+                          late ? "bg-tint-rose text-ink-rose" : isToday ? "bg-tint-amber text-ink-amber" : "text-fg-subtle"
+                        }`}>
+                          {c.dueDateTbd || !c.dueDate ? "No date" : late ? "Overdue" : isToday ? "Today" : new Date(`${c.dueDate}T12:00`).toLocaleDateString([], { month: "short", day: "numeric" })}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Panel>
+          )}
+          {show("schedule") && (
+            <Panel title="Today" href="/calendar" icon={<CalendarDays className="w-4 h-4" />} tone="bg-tint-amber text-ink-amber">
+              <div className="p-5"><TodaySchedule cards={cards} /></div>
+            </Panel>
+          )}
+        {/* Full width when the panels above pair up; otherwise it takes the
+            empty half beside the last one. */}
+        <div className={[show("messages") && canMessages, phone, show("work") && canTasks, show("schedule")].filter(Boolean).length % 2 === 0 ? "lg:col-span-2" : ""}>
           {show("notes") && hasPageAccess("/notes", access) && (
             <Panel title="Recent notes" href="/notes" icon={<StickyNote className="w-4 h-4" />} tone="bg-tint-pink text-ink-pink">
               {notes.length === 0 ? (
                 <Empty icon={StickyNote} text="Nothing written down yet." />
               ) : (
-                <ul className="divide-y divide-line">
-                  {notes.slice(0, 5).map((n) => (
-                    <li key={n.id}>
-                      <Link href="/notes" className="block px-5 py-2.5 hover:bg-surface-3 transition-colors">
-                        <p className="text-sm font-medium text-fg truncate">{n.title || "Untitled"}</p>
-                        <p className="text-[12px] text-fg-muted truncate">{n.body || "No text"}</p>
-                      </Link>
-                    </li>
+                <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-3 p-4">
+                  {[...notes].sort((x, y) => Number(Boolean(y.pinned)) - Number(Boolean(x.pinned)) || y.updatedAt.localeCompare(x.updatedAt)).slice(0, 4).map((n) => (
+                    <Link
+                      key={n.id}
+                      href={`/notes?note=${encodeURIComponent(n.id)}`}
+                      className={`block rounded-xl border border-line p-3.5 hover:shadow-sm hover:-translate-y-0.5 transition-all ${NOTE_TINT[n.color ?? ""] ?? "bg-surface"}`}
+                    >
+                      <p className="text-sm font-semibold text-fg truncate">{n.title || "Untitled"}</p>
+                      <p className="text-[12px] text-fg-muted line-clamp-3 mt-1 whitespace-pre-line">{n.body || "No text"}</p>
+                      <p className="text-[11px] text-fg-subtle mt-2">{ago(Date.parse(n.updatedAt), now)} ago</p>
+                    </Link>
                   ))}
-                </ul>
+                </div>
               )}
             </Panel>
           )}

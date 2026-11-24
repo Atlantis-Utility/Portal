@@ -49,6 +49,13 @@ with **Reseller** scope, plus a separate API application. Hard-won facts:
   create is accepted (200) but ignored, and the call updates the existing
   same-name contact instead. Ask RingLogix for the parameter before
   guessing further on the live PBX.
+- **Editing a contact goes through v2 by id**, which sidesteps the by-name
+  match: `PUT /domains/{d}/users/{u}/contacts/{unique-id}` (or
+  `/domains/{d}/contacts/{id}` for the shared book) is a partial update and
+  answers 202; `DELETE` likewise. Fields are `name-first-name`,
+  `name-last-name`, `email`, `company`, `phonenumber-cell/work/home`.
+  RingLogix has **no notes field**, so contact notes live in the portal's
+  `contact_notes` table, keyed `<book>:<unique-id>` (`updateContact`).
 - Group senders: an inbound message in a group carries the individual
   sender in `from_num`.
 - **MMS goes through v2, not the gateway.** The v1 gateway can't attach a

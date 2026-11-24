@@ -1,6 +1,6 @@
 import { tenantDomain } from "@/lib/tenancy";
 import { NextRequest, NextResponse } from "next/server";
-import { getContacts, createContact, deleteContact, isConfigured, invalidateRinglogixCache } from "@/lib/ringlogix";
+import { getContacts, createContact, updateContact, deleteContact, isConfigured, invalidateRinglogixCache } from "@/lib/ringlogix";
 import { ringlogixFailure } from "@/lib/ringlogix-response";
 import { readAllBooks } from "@/lib/contact-books";
 import { requireAdmin, requireEmployee, ApiAuthError } from "@/lib/api-auth";
@@ -100,6 +100,46 @@ export async function DELETE(req: NextRequest) {
     const body = await req.json();
     const data = await deleteContact(await tenantDomain(), body.user, body.first_name, body.last_name, body.contact_id);
     return NextResponse.json(data);
+  } catch (err) {
+    return refuse(err);
+  }
+}
+
+/**
+ * Edit a contact: name, company, numbers, email. By id, so a rename can't
+ * overwrite somebody else - though a rename onto a name already in that
+ * book is refused, because RingLogix would then hold two of a name it
+ * treats as unique.
+ */
+export async function PATCH(req: NextRequest) {
+  if (!isConfigured()) return NextResponse.json({ error: "not_configured" }, { status: 503 });
+  try {
+    await requireEmployee();
+    const body = (await req.json()) as {
+      user?: string; contact_id?: string;
+      first_name?: string; last_name?: string; company?: string; email?: string;
+      cell_phone?: string; work_phone?: string; home_phone?: string;
+    };
+    const user = String(body.user ?? "").trim();
+    const id = String(body.contact_id ?? "").trim();
+    if (!id) return NextResponse.json({ error: "Which contact?" }, { status: 400 });
+    if (body.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email.trim())) {
+      return NextResponse.json({ error: "That email address doesn't look right." }, { status: 400 });
+    }
+    const domain = await tenantDomain();
+    if (body.first_name !== undefined || body.last_name !== undefined) {
+      invalidateRinglogixCache("rl:contact:");
+      const book = ((await getContacts(domain, user || "*").catch(() => [])) ?? []) as Array<Record<string, unknown>>;
+      const norm = (v: unknown) => String(v ?? "").trim().toLowerCase();
+      const clash = book.find((c) => c.contact_id !== id && norm(c.first_name) === norm(body.first_name) && norm(c.last_name) === norm(body.last_name));
+      if (clash) return NextResponse.json({ error: "Someone with that name is already in this contact book." }, { status: 409 });
+    }
+    const digits = (v?: string) => (v === undefined ? undefined : v.replace(/\D/g, ""));
+    await updateContact(domain, user, id, {
+      first_name: body.first_name?.trim(), last_name: body.last_name?.trim(), company: body.company?.trim(),
+      email: body.email?.trim(), cell_phone: digits(body.cell_phone), work_phone: digits(body.work_phone), home_phone: digits(body.home_phone),
+    });
+    return NextResponse.json({ ok: true });
   } catch (err) {
     return refuse(err);
   }

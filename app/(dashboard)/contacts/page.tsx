@@ -8,6 +8,7 @@ import Overlay from "@/components/ui/Overlay";
 import Header from "@/components/layout/Header";
 import StatCard from "@/components/ui/StatCard";
 import CallLink from "@/components/phone/CallLink";
+import ContactDrawer from "@/components/contacts/ContactDrawer";
 import { colourFor, initialsFor } from "@/components/messages/Avatar";
 import ExportMenu from "@/components/ui/ExportMenu";
 import { BookUser, Mail, Smartphone, Phone, RefreshCw, AlertCircle, Plus, X, Trash2, MessageSquare } from "lucide-react";
@@ -60,6 +61,8 @@ export default function ContactsPage() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [showTests, setShowTests] = useState(false);
+  // The contact open in the side panel, by id, so it re-reads after a save.
+  const [openId, setOpenId] = useState<string | null>(null);
   const isAdmin = Boolean(useAuth().authUser?.isAdmin);
 
   // The domain is always ours: the route fills it in, as Messages does.
@@ -303,18 +306,18 @@ export default function ContactsPage() {
                   const [primaryLabel, primary] = phones[0] ?? ["", ""];
                   const book = !c.user || c.user === "*" ? "Shared" : `Ext ${c.user}`;
                   return (
-                    <li key={(c.contact_id ?? "") + i} className="group grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1.6fr)_6.5rem] gap-4 items-center px-5 py-2.5 hover:bg-surface-3 transition-colors">
+                    <li key={(c.contact_id ?? "") + i} onClick={() => c.contact_id && setOpenId(c.contact_id)} className="cursor-pointer group grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.2fr)_minmax(0,1.5fr)_minmax(0,1.6fr)_6.5rem] gap-4 items-center px-5 py-2.5 hover:bg-surface-3 transition-colors">
                       <span className="flex items-center gap-2.5 min-w-0">
                         <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0 ${colourFor(name)}`}>{initialsFor(name)}</span>
                         <span className="text-sm font-medium text-fg truncate">{name}</span>
                         <span className="shrink-0 text-[10.5px] font-medium px-1.5 py-0.5 rounded bg-surface-3 text-fg-muted">{book}</span>
                       </span>
                       <span className="text-sm text-fg-muted truncate">{c.company || "—"}</span>
-                      <span className="flex items-center gap-1.5 min-w-0 text-sm">
+                      <span className="flex items-center gap-1.5 min-w-0 text-sm" onClick={(e) => e.stopPropagation()}>
                         {primary ? (
                           <>
                             <span className="text-[10.5px] text-fg-subtle shrink-0">{primaryLabel}</span>
-                            <CallLink number={primary} name={name} className="text-fg tabular-nums truncate hover:text-[#0070f3] hover:underline">{formatPhone(primary) || primary}</CallLink>
+                            <CallLink number={primary} name={name} className="text-fg tabular-nums truncate hover:text-[#0070f3] hover:underline" >{formatPhone(primary) || primary}</CallLink>
                             {phones.length > 1 && (
                               <span className="shrink-0 text-[10.5px] font-medium px-1.5 py-0.5 rounded bg-surface-3 text-fg-muted" title={phones.slice(1).map(([l, n]) => `${l}: ${formatPhone(n) || n}`).join(", ")}>
                                 +{phones.length - 1}
@@ -323,8 +326,8 @@ export default function ContactsPage() {
                           </>
                         ) : <span className="text-fg-subtle">{"—"}</span>}
                       </span>
-                      <span className="text-sm text-fg-muted truncate">{c.email ? <a href={`mailto:${c.email}`} className="hover:text-fg hover:underline">{c.email}</a> : "—"}</span>
-                      <span className="flex items-center justify-end gap-0.5">
+                      <span className="text-sm text-fg-muted truncate">{c.email ? <a href={`mailto:${c.email}`} onClick={(e) => e.stopPropagation()} className="hover:text-fg hover:underline">{c.email}</a> : "—"}</span>
+                      <span className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
                         {primary && (
                           <Link
                             href={`/messages?to=${encodeURIComponent(primary.replace(/\D/g, ""))}`}
@@ -364,6 +367,14 @@ export default function ContactsPage() {
           </div>
         )}
       </div>
+
+      <ContactDrawer
+        contact={contacts.find((c) => c.contact_id && c.contact_id === openId) ?? null}
+        onClose={() => setOpenId(null)}
+        onSaved={() => load()}
+        onDelete={async (c) => { await deleteContact(c as Contact); setOpenId(null); }}
+        canDelete={isAdmin}
+      />
 
       {/* Add Contact Modal */}
       {showModal && (

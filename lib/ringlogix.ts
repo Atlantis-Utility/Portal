@@ -450,7 +450,7 @@ export interface PbxDevice {
  * string; the same URL with `?…` attached answers 200 (seen 2026-11-24 on
  * both reading and creating a device). So a harmless one is always added.
  */
-export async function coreApi(method: "GET" | "POST", path: string, body?: unknown): Promise<{ status: number; data: unknown }> {
+export async function coreApi(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<{ status: number; data: unknown }> {
   if (!isConfigured()) throw new Error("RINGLOGIX_NOT_CONFIGURED");
   const { token, type } = await getToken();
   const url = RINGLOGIX_CORE_BASE + path + (path.includes("?") ? "&" : "?") + "client=portal";
@@ -632,6 +632,32 @@ export async function createContact(domain: string, user: string, firstName: str
   // The next read must see it: the inbox names numbers from these books.
   invalidate("rl:contact:");
   return created;
+}
+
+/**
+ * Edits a contact in place, by its id (v2). Unlike contact/create, which
+ * matches by name, this can rename someone without touching another
+ * contact of the new name, and only the fields sent change. An empty
+ * string clears a field. Verified 2026-11-24 (PUT answers 202).
+ */
+export async function updateContact(
+  domain: string,
+  user: string,
+  contactId: string,
+  fields: { first_name?: string; last_name?: string; company?: string; email?: string; cell_phone?: string; work_phone?: string; home_phone?: string },
+) {
+  const body: Record<string, string> = {};
+  const map: Record<string, string> = {
+    first_name: "name-first-name", last_name: "name-last-name", company: "company", email: "email",
+    cell_phone: "phonenumber-cell", work_phone: "phonenumber-work", home_phone: "phonenumber-home",
+  };
+  for (const [k, v] of Object.entries(fields)) if (v !== undefined && map[k]) body[map[k]] = v;
+  const path = user && user !== "*"
+    ? `/domains/${encodeURIComponent(domain)}/users/${encodeURIComponent(user)}/contacts/${encodeURIComponent(contactId)}`
+    : `/domains/${encodeURIComponent(domain)}/contacts/${encodeURIComponent(contactId)}`;
+  const { status, data } = await coreApi("PUT", path, body);
+  if (status >= 300) throw new RingLogixError("contact", "update", status, String((data as { message?: string })?.message ?? ""));
+  invalidate("rl:contact:");
 }
 
 export async function deleteContact(domain: string, user: string, firstName: string, lastName: string, contactId: string) {

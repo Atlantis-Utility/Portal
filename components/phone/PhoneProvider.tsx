@@ -513,7 +513,15 @@ export function PhoneProvider({ enabled, children }: { enabled: boolean; childre
       from.refer(target, {
         ...(opts.replaces ? { replaces: opts.replaces } : {}),
         eventHandlers: {
-          requestSucceeded: () => setTimeout(drop, 6000),
+          requestSucceeded: () => {
+            // Accepted (202): RingLogix starts hanging our legs up straight
+            // away, often before its NOTIFY - mark them now, or the first
+            // leg's BYE reads as "the caller left" and the second call is
+            // promoted in its place (seen in the live test, 2026-11-24).
+            transferred.current.add(from);
+            if (opts.alsoEnd) transferred.current.add(opts.alsoEnd);
+            setTimeout(drop, 6000);
+          },
           requestFailed: (e: { cause?: string; response?: { status_code?: number; getHeader?: (name: string) => string | undefined } }) => {
             // RingLogix says why in a Warning header, e.g. 399 "Failed to
             // find Target Session." (seen transferring a call to the auto

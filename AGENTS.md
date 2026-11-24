@@ -103,10 +103,11 @@ with **Reseller** scope, plus a separate API application. Hard-won facts:
   ("transcription,sentiment"), so Claude writes one (`ANTHROPIC_API_KEY`),
   cached in `call_summaries`. Verified 2026-11-24.
 - **Transfers** are SIP REFER from the browser (blind: `refer(target)`;
-  warm: REFER with Replaces after a consult call). A REFER on a call to the
-  auto attendant (801) to our own extension was refused 400 with Warning
-  `"Failed to find Target Session."` - test transfers with a real person on
-  the line. Conferences are mixed in the browser (each leg is sent the mic
+  warm: REFER with Replaces after a consult call). Both verified with a
+  person on the line 2026-11-24: RingLogix answers 202 and hangs our legs
+  up itself, often before its NOTIFY, so legs are marked transferred on the
+  202. Transferring a call *with the auto attendant* to our own extension
+  was refused 400 (`"Failed to find Target Session."`). Conferences are mixed in the browser (each leg is sent the mic
   plus the other leg's audio) and verified with two auto attendants.
 - Which extension a person calls as lives in `phone_extensions`, admin-set
   in Edit Profile. Never on `employees.data`: any signed-in user can write

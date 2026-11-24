@@ -200,6 +200,7 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
         senders={senders}
         onCancel={() => (prefill && !inline && onClose ? onClose() : setView({ mode: "list" }))}
         onSaved={() => { setView({ mode: "list" }); reload(); }}
+        framed={!inline}
       />
     );
     return inline ? editor : <Modal onClose={onClose}>{editor}</Modal>;
@@ -691,7 +692,7 @@ function Step({ n, title, hint, children }: { n: number; title: string; hint?: s
 }
 
 function Editor({
-  workflow, template, prefill, conversations, contacts, senders, onCancel, onSaved,
+  workflow, template, prefill, conversations, contacts, senders, onCancel, onSaved, framed = false,
 }: {
   workflow: Workflow | null;
   template: Template | null;
@@ -701,6 +702,8 @@ function Editor({
   senders: Array<{ number: string; user: string }>;
   onCancel: () => void;
   onSaved: () => void;
+  /** In the pop-up: its own padding, and the action bar pinned at the top. */
+  framed?: boolean;
 }) {
   const toast = useToast();
   const confirm = useConfirm();
@@ -819,9 +822,11 @@ function Editor({
     }`;
 
   return (
-    <div className="p-4 md:p-0 space-y-5">
-      {/* Title bar */}
-      <div className="flex flex-wrap items-center gap-3">
+    <div className={framed ? "" : "p-4 md:p-0 space-y-5"}>
+      {/* Title bar: pinned in the pop-up, so Create is always in reach. */}
+      <div className={`flex flex-wrap items-center gap-3 ${
+        framed ? "sticky top-0 z-10 px-4 md:px-6 py-3 bg-surface/95 backdrop-blur border-b border-line" : ""
+      }`}>
         <button onClick={onCancel} className="flex items-center gap-1.5 text-[13px] text-fg-muted hover:text-fg">
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
@@ -840,7 +845,7 @@ function Editor({
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-[minmax(0,1fr)_20rem] gap-5 items-start">
+      <div className={`grid lg:grid-cols-[minmax(0,1fr)_20rem] gap-5 lg:gap-6 items-start ${framed ? "p-4 md:p-6" : ""}`}>
         <div className="space-y-4">
           <div>
             <label className={label}>Workflow name</label>
@@ -1020,7 +1025,7 @@ function Editor({
         </div>
 
         {/* ── Live preview ── */}
-        <aside className="lg:sticky lg:top-0 space-y-4">
+        <aside className={`lg:sticky space-y-4 ${framed ? "lg:top-[4.75rem]" : "lg:top-0"}`}>
           <div className="bg-surface border border-line rounded-xl p-4">
             <p className="text-[11px] font-medium uppercase tracking-wider text-fg-subtle mb-3">Preview</p>
             <div className="rounded-2xl bg-surface-2 border border-line p-3 min-h-40">

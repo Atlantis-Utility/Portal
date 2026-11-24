@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Drawer from "@/components/ui/Drawer";
 import FormField, { inputClass } from "@/components/ui/FormField";
+import { TagChips, TagPicker } from "@/components/ui/TagPicker";
 import DateTimePicker from "@/components/ui/DateTimePicker";
 import TimePicker from "@/components/ui/TimePicker";
 import Select from "@/components/ui/Select";
@@ -11,7 +12,7 @@ import { getAvatarColor, getInitials, getErrorMessage } from "@/lib/utils";
 import Link from "next/link";
 import {
   Clock, Trash2, Pencil, ExternalLink, Video,
-  FolderKanban, Tag, AlertCircle, CheckCircle2, Check, Building2,
+  FolderKanban, AlertCircle, CheckCircle2, Check, Building2,
 } from "lucide-react";
 import type { KanbanCard, KanbanColumn, KanbanPriority } from "./AddTaskDrawer";
 
@@ -356,13 +357,8 @@ export default function TaskDetailDrawer({ card, open, onClose, onUpdate, onDele
             </>
           )}
 
-          <FormField label="Tags" hint="Comma-separated, e.g. Engineering, Bug, Urgent">
-            <input
-              className={inputClass}
-              placeholder="Engineering, Bug, Urgent"
-              value={form.tagsStr}
-              onChange={(e) => setF("tagsStr", e.target.value)}
-            />
+          <FormField label="Tags" hint="The same tags as Messages, so they filter together">
+            <TagPicker value={form.tagsStr.split(",").map((t) => t.trim()).filter(Boolean)} onChange={(t) => setF("tagsStr", t.join(","))} />
           </FormField>
 
           <div className="border-t border-[#f7f7f7] pt-4">
@@ -581,16 +577,7 @@ export default function TaskDetailDrawer({ card, open, onClose, onUpdate, onDele
         {card.tags.length > 0 && (
           <div>
             <p className="text-[10px] font-semibold text-[#999] uppercase tracking-widest mb-2">Tags</p>
-            <div className="flex flex-wrap gap-1.5">
-              {card.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 bg-[#f5f5f5] text-[#555] rounded-full"
-                >
-                  <Tag className="w-2.5 h-2.5" /> {tag}
-                </span>
-              ))}
-            </div>
+            <TagChips tags={card.tags} max={20} />
           </div>
         )}
 

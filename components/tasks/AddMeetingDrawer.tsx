@@ -5,6 +5,7 @@ import DateTimePicker from "@/components/ui/DateTimePicker";
 import TimePicker from "@/components/ui/TimePicker";
 import Drawer from "@/components/ui/Drawer";
 import FormField, { inputClass } from "@/components/ui/FormField";
+import { TagPicker } from "@/components/ui/TagPicker";
 import Select from "@/components/ui/Select";
 import { useEmployees } from "@/lib/db/employees";
 import { getAvatarColor, getInitials } from "@/lib/utils";
@@ -243,13 +244,8 @@ export default function AddMeetingDrawer({ open, onClose, onAdd }: Props) {
               ]}
             />
           </FormField>
-          <FormField label="Tags" hint="Comma-separated">
-            <input
-              className={inputClass}
-              placeholder="Planning, Q3, All-hands"
-              value={form.tags}
-              onChange={(e) => set("tags", e.target.value)}
-            />
+          <FormField label="Tags">
+            <TagPicker value={form.tags.split(",").map((t) => t.trim()).filter(Boolean)} onChange={(t) => set("tags", t.join(","))} />
           </FormField>
         </div>
 

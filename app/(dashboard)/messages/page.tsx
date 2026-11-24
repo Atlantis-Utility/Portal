@@ -6,7 +6,7 @@ import Select from "@/components/ui/Select";
 import {
   MessageSquare, RefreshCw, AlertCircle, BellOff,
   Send, Check, MailOpen, Mail, PanelRight, Search, Tag as TagIcon, Paperclip,
-  Inbox, Phone, UserPlus, ExternalLink, ChevronLeft, PenSquare, X, Pencil, Trash2,
+  Inbox, Phone, UserPlus, ExternalLink, ChevronLeft, PenSquare, X, Pencil, Trash2, ListPlus,
 } from "lucide-react";
 import { formatPhone } from "@/lib/utils";
 import { useToast } from "@/lib/toast";
@@ -18,6 +18,8 @@ import {
 import { MESSAGE_TAGS, knownTags } from "@/lib/message-tags";
 import Avatar from "@/components/messages/Avatar";
 import CallLink from "@/components/phone/CallLink";
+import AddTaskDrawer from "@/components/tasks/AddTaskDrawer";
+import { addTask } from "@/lib/db/tasks";
 import ScheduledMessages, { type SchedulePrefill } from "@/components/messages/ScheduledMessages";
 import AccessSection from "@/components/messages/AccessSection";
 import { SCHEDULE_OPTION } from "@/lib/workflows/types";
@@ -1088,6 +1090,12 @@ function Details({
             );
           })}
         </div>
+        <CreateTaskFromConversation
+          name={displayName}
+          number={conversation.remote}
+          sessionId={conversation.sessionId}
+          tags={tags}
+        />
       </Section>
 
       <Section
@@ -1820,5 +1828,50 @@ export default function MessagesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * "Create task" from a conversation: the Add Task drawer, filled in with
+ * who it's about, a link back to the thread, and the conversation's tags -
+ * the same tag set Tasks filters by, so a "Follow up" text becomes a
+ * "Follow up" task.
+ */
+function CreateTaskFromConversation({ name, number, sessionId, tags }: { name: string; number: string; sessionId: string; tags: string[] }) {
+  const { authUser } = useAuth();
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const link = `/messages?session=${encodeURIComponent(sessionId)}`;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-3 w-full inline-flex items-center justify-center gap-1.5 rounded-lg border border-line bg-surface py-2 text-[12px] font-semibold text-fg hover:bg-surface-3 transition-colors"
+      >
+        <ListPlus className="w-3.5 h-3.5" /> Create task from this conversation
+      </button>
+      {open && (
+        <AddTaskDrawer
+          open
+          onClose={() => setOpen(false)}
+          initial={{
+            title: `Follow up with ${name}`,
+            description: `${number ? `${formatPhone(number) || number}
+` : ""}From the conversation: ${link}`,
+            tags,
+          }}
+          onAdd={async (card) => {
+            try {
+              await addTask({ ...card, createdBy: authUser?.accessEmployeeId ?? undefined });
+              toast.success("Task created. It's on the Tasks board.");
+              setOpen(false);
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "Couldn't create the task");
+            }
+          }}
+        />
+      )}
+    </>
   );
 }

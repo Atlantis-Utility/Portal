@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "@/components/ui/Select";
+import { TagChips } from "@/components/ui/TagPicker";
+import { MESSAGE_TAGS, TAG_BY_KEY } from "@/lib/message-tags";
 import Header from "@/components/layout/Header";
 import AddTaskDrawer, { type KanbanCard, type KanbanColumn } from "@/components/tasks/AddTaskDrawer";
 import TaskDetailDrawer from "@/components/tasks/TaskDetailDrawer";
@@ -47,6 +49,7 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [mineOnly, setMineOnly] = useState(false);
+  const [tag, setTag] = useState("");
   const [adding, setAdding] = useState<KanbanColumn | null>(null);
   const [open, setOpen] = useState<KanbanCard | null>(null);
 
@@ -64,15 +67,24 @@ export default function TasksPage() {
     const q = search.trim().toLowerCase();
     return cards.filter((c) => {
       if (mineOnly && me && !c.assignees.some((a) => a.trim().toLowerCase() === me)) return false;
+      if (tag && !(c.tags ?? []).includes(tag)) return false;
       if (!q) return true;
       return (
         c.title.toLowerCase().includes(q) ||
         c.description.toLowerCase().includes(q) ||
-        c.tags.some((t) => t.toLowerCase().includes(q)) ||
+        // By key or by the label people see ("follow-up" / "Follow up").
+        (c.tags ?? []).some((t) => t.toLowerCase().includes(q) || (TAG_BY_KEY[t]?.label ?? "").toLowerCase().includes(q)) ||
         c.assignees.some((a) => a.toLowerCase().includes(q))
       );
     });
-  }, [cards, search, mineOnly, me]);
+  }, [cards, search, mineOnly, me, tag]);
+
+  // How many tasks carry each tag, for the filter row.
+  const tagCounts = useMemo(() => {
+    const n: Record<string, number> = {};
+    for (const c of cards) for (const t of c.tags ?? []) n[t] = (n[t] ?? 0) + 1;
+    return n;
+  }, [cards]);
 
   const move = useCallback(async (card: KanbanCard, column: KanbanColumn) => {
     // Optimistic: the board should answer the click, not the network.
@@ -118,6 +130,31 @@ export default function TasksPage() {
         </button>
       </div>
 
+      {/* The same tags as Messages: one click shows only those tasks. */}
+      <div className="flex items-center gap-1.5 mb-5 -mt-2 overflow-x-auto pb-1">
+        <span className="text-[11px] font-medium text-fg-subtle mr-1 shrink-0">Tags</span>
+        {MESSAGE_TAGS.map((t) => {
+          const on = tag === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setTag(on ? "" : t.key)}
+              aria-pressed={on}
+              className={`shrink-0 inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border transition-colors ${
+                on ? `${t.className} border-transparent` : "border-line bg-surface text-fg-muted hover:border-line-strong hover:text-fg"
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${t.dot}`} />
+              {t.label}
+              {tagCounts[t.key] ? <span className="tabular-nums opacity-70">{tagCounts[t.key]}</span> : null}
+            </button>
+          );
+        })}
+        {tag && (
+          <button onClick={() => setTag("")} className="shrink-0 text-xs text-fg-subtle hover:text-fg px-2">Clear</button>
+        )}
+      </div>
+
       {loading ? (
         <div className="bg-white border border-[#eaeaea] rounded-xl p-12 text-center">
           <RefreshCw className="w-5 h-5 animate-spin text-[#999] mx-auto mb-3" />
@@ -161,6 +198,7 @@ export default function TasksPage() {
                           {card.description && (
                             <p className="text-[11px] text-[#999] mt-1 line-clamp-2">{card.description}</p>
                           )}
+                          {(card.tags ?? []).length > 0 && <div className="mt-2"><TagChips tags={card.tags} /></div>}
                         </button>
 
                         <div className="flex flex-wrap items-center gap-1.5 mt-2.5">

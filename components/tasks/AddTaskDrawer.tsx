@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check } from "lucide-react";
 import Drawer from "@/components/ui/Drawer";
 import FormField, { inputClass } from "@/components/ui/FormField";
+import { TagPicker } from "@/components/ui/TagPicker";
 import DateTimePicker from "@/components/ui/DateTimePicker";
 import Select from "@/components/ui/Select";
 import { useEmployees } from "@/lib/db/employees";
@@ -60,6 +61,8 @@ interface Props {
   onClose: () => void;
   onAdd: (card: KanbanCard) => void;
   defaultColumn?: KanbanColumn;
+  /** Starting values, e.g. a task made from a conversation. Read when the drawer mounts. */
+  initial?: { title?: string; description?: string; tags?: string[] };
 }
 
 const emptyForm = {
@@ -75,8 +78,13 @@ const emptyForm = {
 
 type FormErrors = Partial<Record<"title" | "dueDate", string>>;
 
-export default function AddTaskDrawer({ open, onClose, onAdd, defaultColumn }: Props) {
-  const [form, setForm] = useState(emptyForm);
+export default function AddTaskDrawer({ open, onClose, onAdd, defaultColumn, initial }: Props) {
+  const [form, setForm] = useState(() => ({
+    ...emptyForm,
+    title: initial?.title ?? "",
+    description: initial?.description ?? "",
+    tags: (initial?.tags ?? []).join(","),
+  }));
   const [errors, setErrors] = useState<FormErrors>({});
   const employees = useEmployees();
 
@@ -233,13 +241,8 @@ export default function AddTaskDrawer({ open, onClose, onAdd, defaultColumn }: P
           {errors.dueDate && <p className="mt-1 text-[11px] text-[#f31260]">{errors.dueDate}</p>}
         </div>
 
-        <FormField label="Tags" hint="Comma-separated, e.g. Engineering, Bug, Urgent">
-          <input
-            className={inputClass}
-            placeholder="Engineering, Bug, Urgent"
-            value={form.tags}
-            onChange={(e) => set("tags", e.target.value)}
-          />
+        <FormField label="Tags" hint="The same tags as Messages, so they filter together">
+          <TagPicker value={form.tags.split(",").map((t) => t.trim()).filter(Boolean)} onChange={(t) => set("tags", t.join(","))} />
         </FormField>
 
         <div className="border-t border-[#f7f7f7] pt-4">

@@ -15,6 +15,10 @@ export interface Note {
   recipientIds: string[]; // employee ids this note has been shared/sent to
   createdAt: string;
   updatedAt: string;
+  /** Kept at the top of the board. */
+  pinned?: boolean;
+  /** Card colour: a key of NOTE_COLORS on the Notes page. */
+  color?: string;
 }
 
 interface Row { id: string; data: Note }

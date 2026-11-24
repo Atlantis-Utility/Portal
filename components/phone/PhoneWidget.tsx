@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { usePolling } from "@/lib/use-polling";
 import CallDetailPanel from "@/components/calls/CallDetailPanel";
+import AudioPlayer from "@/components/ui/AudioPlayer";
 import { usePhoneState, type CallInfo } from "./PhoneProvider";
 import CallScreen from "./CallScreen";
 import { colourFor, initialsFor } from "@/components/messages/Avatar";
@@ -356,7 +357,7 @@ function VoicemailTab({ recents, directory, onCall }: { recents: Recents | null;
                     </button>
                     {expanded && (
                       <div className="pl-[4.25rem] pr-4 pb-3 space-y-2">
-                        <audio controls autoPlay preload="none" src={audio} className="w-full h-9" />
+                        <AudioPlayer src={audio} durationHint={v.durationSec} autoPlay compact download={false} />
                         {number && (
                           <button type="button" onClick={() => onCall(number, name === shown(number) ? "" : name)} className="inline-flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 bg-[#17c964] text-white hover:bg-[#12a150]">
                             <Phone className="w-3.5 h-3.5" /> Call back

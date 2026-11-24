@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, FileText, RefreshCw, AlertCircle, ChevronDown, Download } from "lucide-react";
+import { Sparkles, FileText, RefreshCw, AlertCircle, ChevronDown } from "lucide-react";
+import AudioPlayer, { type AudioPlayerHandle } from "@/components/ui/AudioPlayer";
 import type { CallDetail, CallSummary } from "@/lib/call-intel";
 
 /**
@@ -19,7 +20,7 @@ export default function CallDetailPanel({ id, compact = false }: { id: string; c
   const [summaryState, setSummaryState] = useState<"idle" | "working" | "error">("idle");
   const [summaryError, setSummaryError] = useState("");
   const [showTranscript, setShowTranscript] = useState(!compact);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioRef = useRef<AudioPlayerHandle | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -44,12 +45,7 @@ export default function CallDetailPanel({ id, compact = false }: { id: string; c
     return () => { live = false; };
   }, [id]);
 
-  const seek = (sec: number) => {
-    const a = audioRef.current;
-    if (!a) return;
-    a.currentTime = sec;
-    void a.play().catch(() => {});
-  };
+  const seek = (sec: number) => audioRef.current?.seek(sec);
 
   if (error) {
     return <p className="text-xs text-fg-subtle flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" /> {error}</p>;
@@ -70,14 +66,7 @@ export default function CallDetailPanel({ id, compact = false }: { id: string; c
   return (
     <div className={`space-y-3 ${compact ? "" : "max-w-2xl"}`}>
       {detail.recording ? (
-        <div className="flex items-center gap-2">
-          <audio ref={audioRef} controls preload="none" src={audio} className="w-full h-10" />
-          {!compact && (
-            <a href={audio} download className="shrink-0 w-9 h-9 rounded-lg border border-line bg-surface flex items-center justify-center text-fg-muted hover:bg-surface-3 hover:text-fg" data-tip="Download recording" aria-label="Download recording">
-              <Download className="w-4 h-4" />
-            </a>
-          )}
-        </div>
+        <AudioPlayer ref={audioRef} src={audio} durationHint={detail.recording.durationSec} download={!compact} compact={compact} />
       ) : (
         <p className="text-xs text-fg-subtle">No recording of this call.</p>
       )}

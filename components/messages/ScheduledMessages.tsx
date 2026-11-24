@@ -8,6 +8,7 @@ import {
   CheckCircle2, Clock, Zap, FileText, Send, LayoutTemplate,
 } from "lucide-react";
 import Overlay from "@/components/ui/Overlay";
+import StatCard from "@/components/ui/StatCard";
 import FloatingLayer from "@/components/ui/FloatingLayer";
 import DateTimePicker from "@/components/ui/DateTimePicker";
 import { useToast } from "@/lib/toast";
@@ -228,16 +229,16 @@ export default function ScheduledMessages({ conversations, contacts, senders, pr
     <div className="space-y-5">
       {inline && workflows !== null && workflows.length > 0 && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <Stat label="Active" value={counts.active} icon={Zap} hint={counts.active === 1 ? "workflow running" : "workflows running"} />
-          <Stat label="Paused" value={counts.paused} icon={Pause} hint="waiting to resume" />
-          <Stat
+          <StatCard label="Active" value={counts.active} icon={Zap} tone="bg-tint-green text-ink-green" hint={counts.active === 1 ? "workflow running" : "workflows running"} />
+          <StatCard label="Paused" value={counts.paused} icon={Pause} tone="bg-tint-amber text-ink-amber" hint="waiting to resume" />
+          <StatCard
             label="Next run"
-            value={nextUp ? showTime(nextUp.nextRunAt).replace(/^\w+, /, "") : "—"}
+            value={<span className="text-base">{nextUp ? showTime(nextUp.nextRunAt).replace(/^\w+, /, "") : "—"}</span>}
             icon={Clock}
+            tone="bg-tint-blue text-ink-blue"
             hint={nextUp ? nextUp.name || nextUp.action.text.slice(0, 32) : "nothing scheduled"}
-            small
           />
-          <Stat label="Total runs" value={totalRuns} icon={CheckCircle2} hint="across all workflows" />
+          <StatCard label="Total runs" value={totalRuns} icon={CheckCircle2} tone="bg-tint-violet text-ink-violet" hint="across all workflows" />
         </div>
       )}
 
@@ -380,21 +381,6 @@ function Modal({
         <div className="flex-1 min-h-0 overflow-y-auto">{children}</div>
       </div>
     </Overlay>
-  );
-}
-
-function Stat({
-  label, value, hint, icon: Icon, small = false,
-}: { label: string; value: React.ReactNode; hint: string; icon: React.ElementType; small?: boolean }) {
-  return (
-    <div className="bg-surface border border-line rounded-xl px-4 py-3.5">
-      <div className="flex items-center justify-between">
-        <p className="text-[12px] font-medium text-fg-muted">{label}</p>
-        <Icon className="w-3.5 h-3.5 text-fg-subtle" />
-      </div>
-      <p className={`mt-1.5 font-semibold tracking-tight text-fg tabular-nums truncate ${small ? "text-base" : "text-2xl"}`}>{value}</p>
-      <p className="text-[11px] text-fg-subtle mt-0.5 truncate">{hint}</p>
-    </div>
   );
 }
 

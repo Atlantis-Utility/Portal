@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Voicemail as VoicemailIcon, PhoneIncoming, PhoneOutgoing, PhoneMissed, Phone, MessageSquare,
-  RefreshCw, AlertCircle, Search, ChevronDown, ArrowUpRight, Download, Inbox, Sparkles,
+  RefreshCw, AlertCircle, Search, ChevronDown, ArrowUpRight, Inbox, Sparkles,
 } from "lucide-react";
 import Header from "@/components/layout/Header";
 import CallLink from "@/components/phone/CallLink";
 import CallDetailPanel from "@/components/calls/CallDetailPanel";
+import StatCard from "@/components/ui/StatCard";
+import AudioPlayer from "@/components/ui/AudioPlayer";
 import Select from "@/components/ui/Select";
 import { colourFor, initialsFor } from "@/components/messages/Avatar";
 import { usePolling } from "@/lib/use-polling";
@@ -240,22 +242,16 @@ export default function InboxPage() {
       {/* At a glance; each card is also a shortcut to its filter. */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
         {stats.map((st) => (
-          <button
+          <StatCard
             key={st.id}
+            label={st.label}
+            value={st.value}
+            hint={st.hint}
+            icon={st.Icon}
+            tone={st.tone}
+            loading={state !== "ok"}
             onClick={() => setKind(kind === st.id ? "all" : st.id)}
-            className={`text-left bg-surface border rounded-xl p-4 transition-all hover:shadow-sm ${
-              kind === st.id ? "border-fg ring-1 ring-fg" : "border-line hover:border-line-strong"
-            }`}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[13px] font-medium text-fg-muted">{st.label}</span>
-              <span className={`w-8 h-8 rounded-lg flex items-center justify-center ${st.tone}`}><st.Icon className="w-4 h-4" /></span>
-            </div>
-            <p className="text-2xl font-semibold text-fg tabular-nums leading-none">
-              {state === "ok" ? st.value : <span className="inline-block w-8 h-6 rounded bg-surface-3 animate-pulse align-middle" />}
-            </p>
-            <p className="text-[11px] text-fg-subtle mt-1.5">{st.hint}</p>
-          </button>
+          />
         ))}
       </div>
 
@@ -538,7 +534,7 @@ function Row({
             <span className="text-sm font-medium text-fg truncate">{who}</span>
             {v.durationSec ? <span className="text-[11px] text-fg-subtle tabular-nums shrink-0">{duration(v.durationSec)}</span> : null}
           </span>
-          <span className={`block text-[13px] text-fg-muted mt-0.5 ${open ? "" : "truncate"}`}>
+          <span className="block text-[13px] text-fg-muted mt-0.5 truncate">
             {v.transcription || <span className="italic text-fg-subtle">No transcription</span>}
           </span>
         </span>
@@ -548,24 +544,33 @@ function Row({
         <Trail><ChevronDown className={`w-4 h-4 text-fg-subtle transition-transform ${open ? "rotate-180" : ""}`} /></Trail>
       </button>
       {open && (
-        <div className="pl-[4.5rem] pr-5 pb-4 space-y-3">
-          {/* Streams through our server: RingLogix's own link needs no login. */}
-          <audio controls autoPlay preload="none" src={audio} className="w-full max-w-lg h-10" />
-          <div className="flex flex-wrap items-center gap-2">
-            {v.fromNumber && !v.fromExtension && (
-              <CallLink number={v.fromNumber} name={who} className="inline-flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 bg-fg text-surface hover:opacity-90">
-                <Phone className="w-3.5 h-3.5" /> Call back
-              </CallLink>
-            )}
-            {thread && (
-              <Link href={`/messages?session=${encodeURIComponent(thread)}`} className="inline-flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 border border-line bg-surface text-fg hover:bg-surface-3">
-                <MessageSquare className="w-3.5 h-3.5" /> Text them
-              </Link>
-            )}
-            <a href={audio} download className="inline-flex items-center gap-1.5 text-xs font-medium rounded-lg px-3 py-1.5 border border-line bg-surface text-fg hover:bg-surface-3">
-              <Download className="w-3.5 h-3.5" /> Download
-            </a>
-            {v.fromNumber && <span className="text-xs text-fg-subtle tabular-nums ml-1">{formatPhone(v.fromNumber) || v.fromNumber}</span>}
+        <div className="pl-[4.5rem] pr-5 pb-5">
+          <div className="max-w-2xl space-y-3">
+            {/* What they said */}
+            <div className="rounded-xl border border-line bg-surface px-4 py-3">
+              <p className="text-[10.5px] font-semibold uppercase tracking-wider text-fg-subtle mb-1">Transcript</p>
+              <p className="text-[13.5px] leading-relaxed text-fg whitespace-pre-wrap">
+                {v.transcription || <span className="italic text-fg-subtle">RingLogix didn&apos;t transcribe this one. Play it below.</span>}
+              </p>
+            </div>
+            {/* Streams through our server: RingLogix's own link needs no login. */}
+            <AudioPlayer src={audio} durationHint={v.durationSec} autoPlay />
+            <div className="flex flex-wrap items-center gap-2">
+              {v.fromNumber && !v.fromExtension && (
+                <CallLink number={v.fromNumber} name={who} className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg px-3 py-2 bg-fg text-surface hover:opacity-90">
+                  <Phone className="w-3.5 h-3.5" /> Call back
+                </CallLink>
+              )}
+              {thread && (
+                <Link href={`/messages?session=${encodeURIComponent(thread)}`} className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg px-3 py-2 border border-line bg-surface text-fg hover:bg-surface-3">
+                  <MessageSquare className="w-3.5 h-3.5" /> Text them
+                </Link>
+              )}
+              <span className="ml-auto text-xs text-fg-subtle tabular-nums">
+                {v.fromNumber ? formatPhone(v.fromNumber) || v.fromNumber : v.fromExtension ? `Extension ${v.fromExtension}` : ""}
+                {v.durationSec ? ` · ${duration(v.durationSec)}` : ""}
+              </span>
+            </div>
           </div>
         </div>
       )}

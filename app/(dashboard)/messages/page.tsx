@@ -1441,15 +1441,9 @@ export default function MessagesPage() {
           onClose={() => setScheduling(null)}
         />
       )}
-      <div className="flex items-start justify-between gap-3 mb-4 shrink-0">
+      <div className="flex items-center justify-between gap-3 mb-3 shrink-0">
         <div className="min-w-0">
           <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-[#0a0a0a]">Messages</h1>
-          {/* Deliberately not "the same ones that appear in Teams", which
-              was true and read as a dependency: this talks to RingLogix,
-              and Teams is a second reader of the same mailbox. */}
-          <p className="text-sm text-[#666] mt-0.5">
-            Texts to and from our numbers, straight from the phone system
-          </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {canSchedule && (
@@ -1521,16 +1515,24 @@ export default function MessagesPage() {
                 pane === "list" ? "flex" : "hidden md:flex"
               }`}
             >
-              <div className="p-3 border-b border-[#eaeaea] space-y-2.5 shrink-0">
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Search className="w-3.5 h-3.5 text-[#999] absolute left-3 top-1/2 -translate-y-1/2" />
+              {/* One row: search, which conversations, start a new one. */}
+              <div className="p-2.5 border-b border-[#eaeaea] shrink-0">
+                <div className="flex items-center gap-1.5">
+                  <div className="relative flex-1 min-w-0">
+                    <Search className="w-3.5 h-3.5 text-[#999] absolute left-2.5 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
-                      placeholder="Search"
+                      placeholder={search.trim() ? "Search" : `Search ${conversations.length}`}
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
-                      className="w-full text-sm bg-[#fafafa] border border-[#eaeaea] rounded-lg pl-9 pr-3 py-1.5 outline-none focus:border-[#0070f3] focus:bg-white transition-colors"
+                      className="w-full text-sm bg-[#fafafa] border border-[#eaeaea] rounded-lg pl-8 pr-2 h-8 outline-none focus:border-[#0070f3] focus:bg-white transition-colors"
+                    />
+                  </div>
+                  <div className="w-[6.75rem] shrink-0">
+                    <Select
+                      value={filter}
+                      onChange={(v) => setFilter(v as typeof filter)}
+                      options={FILTERS.map((f) => ({ value: f.key, label: f.n > 0 ? `${f.label} · ${f.n}` : f.label }))}
                     />
                   </div>
                   <button
@@ -1542,37 +1544,9 @@ export default function MessagesPage() {
                     <PenSquare className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <div className="flex items-center gap-1">
-                  {search.trim() && (
-                    <span className="text-[11px] text-[#999] px-1">
-                      {filtered.length} of {conversations.length}
-                    </span>
-                  )}
-                  {FILTERS.map((f) => {
-                    const on = filter === f.key;
-                    return (
-                      <button
-                        key={f.key}
-                        onClick={() => setFilter(f.key)}
-                        className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-medium transition-colors ${
-                          on ? "bg-[#eff6ff] text-[#0070f3]" : "text-[#999] hover:bg-[#fafafa] hover:text-[#444]"
-                        }`}
-                      >
-                        <f.Icon className="w-3.5 h-3.5" />
-                        {f.label}
-                        {f.n > 0 && (
-                          <span
-                            className={`rounded px-1 text-[10px] font-semibold ${
-                              on ? "bg-[#0070f3] text-white" : "bg-[#f0f0f0] text-[#666]"
-                            }`}
-                          >
-                            {f.n}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                {search.trim() && (
+                  <p className="text-[11px] text-[#999] px-1 pt-1.5">{filtered.length} of {conversations.length}</p>
+                )}
               </div>
 
               <div className="flex-1 overflow-y-auto min-h-0">

@@ -6,6 +6,7 @@ import { usePolling } from "@/lib/use-polling";
 import { useConfirm } from "@/lib/confirm";
 import Overlay from "@/components/ui/Overlay";
 import Header from "@/components/layout/Header";
+import StatCard from "@/components/ui/StatCard";
 import CallLink from "@/components/phone/CallLink";
 import ExportMenu from "@/components/ui/ExportMenu";
 import { BookUser, Mail, Smartphone, Phone, RefreshCw, AlertCircle, Plus, X, Trash2 } from "lucide-react";
@@ -206,47 +207,11 @@ export default function ContactsPage() {
       </div>
 
       {/* KPI strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white border border-[#eaeaea] rounded-xl p-5">
-          <div className="bg-[#fafafa] border border-[#eaeaea] p-2 rounded-lg w-fit mb-3">
-            <BookUser className="w-4 h-4 text-[#0070f3]" />
-          </div>
-          <p className="text-3xl font-semibold text-[#0a0a0a] leading-none mb-1">
-            {state === "ok" ? contacts.length : "-"}
-          </p>
-          <p className="text-sm text-[#666] mb-1">Total</p>
-          <p className="text-xs text-[#999]">All contacts</p>
-        </div>
-        <div className="bg-white border border-[#eaeaea] rounded-xl p-5">
-          <div className="bg-[#fafafa] border border-[#eaeaea] p-2 rounded-lg w-fit mb-3">
-            <Mail className="w-4 h-4 text-[#17c964]" />
-          </div>
-          <p className="text-3xl font-semibold text-[#0a0a0a] leading-none mb-1">
-            {state === "ok" ? withEmail : "-"}
-          </p>
-          <p className="text-sm text-[#666] mb-1">With Email</p>
-          <p className="text-xs text-[#999]">Email address on file</p>
-        </div>
-        <div className="bg-white border border-[#eaeaea] rounded-xl p-5">
-          <div className="bg-[#fafafa] border border-[#eaeaea] p-2 rounded-lg w-fit mb-3">
-            <Smartphone className="w-4 h-4 text-[#7c3aed]" />
-          </div>
-          <p className="text-3xl font-semibold text-[#0a0a0a] leading-none mb-1">
-            {state === "ok" ? withMobile : "-"}
-          </p>
-          <p className="text-sm text-[#666] mb-1">With Mobile</p>
-          <p className="text-xs text-[#999]">Cell phone on file</p>
-        </div>
-        <div className="bg-white border border-[#eaeaea] rounded-xl p-5">
-          <div className="bg-[#fafafa] border border-[#eaeaea] p-2 rounded-lg w-fit mb-3">
-            <Phone className="w-4 h-4 text-[#f5a524]" />
-          </div>
-          <p className="text-3xl font-semibold text-[#0a0a0a] leading-none mb-1">
-            {state === "ok" ? withWork : "-"}
-          </p>
-          <p className="text-sm text-[#666] mb-1">With Work Phone</p>
-          <p className="text-xs text-[#999]">Work number on file</p>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <StatCard label="Contacts" hint="Across every book" value={contacts.length} loading={state !== "ok"} icon={BookUser} tone="bg-tint-blue text-ink-blue" />
+        <StatCard label="With email" hint="Address on file" value={withEmail} loading={state !== "ok"} icon={Mail} tone="bg-tint-green text-ink-green" />
+        <StatCard label="With mobile" hint="Cell number on file" value={withMobile} loading={state !== "ok"} icon={Smartphone} tone="bg-tint-violet text-ink-violet" />
+        <StatCard label="With work phone" hint="Work number on file" value={withWork} loading={state !== "ok"} icon={Phone} tone="bg-tint-amber text-ink-amber" />
       </div>
 
       {/* Table */}

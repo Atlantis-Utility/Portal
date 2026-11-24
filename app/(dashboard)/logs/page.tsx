@@ -3,8 +3,9 @@
 import { useState, useEffect, useMemo } from "react";
 import {
   Search, Trash2, Users, FolderKanban, Settings,
-  Shield, Wifi, Layers, LogIn, Filter, Bell, BellRing,
+  Shield, Wifi, Layers, LogIn, Filter, Bell, BellRing, ScrollText, CalendarDays, CalendarRange,
 } from "lucide-react";
+import StatCard from "@/components/ui/StatCard";
 import Select from "@/components/ui/Select";
 import { getLogs, visibleLogs, type ActivityLogEntry, type LogCategory } from "@/lib/activity-log";
 import { useAuth } from "@/lib/auth-context";
@@ -225,18 +226,11 @@ export default function LogsPage() {
       </div>
 
       {/* KPI strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 md:flex md:items-stretch gap-px bg-[#f4f4f4] border border-[#eaeaea] rounded-xl mb-5 overflow-hidden">
-        {[
-          { label: "Total entries",  value: logs.length },
-          { label: "Today",          value: logs.filter((e) => withinDateFilter(e.timestamp, "today")).length },
-          { label: "This week",      value: logs.filter((e) => withinDateFilter(e.timestamp, "7d")).length },
-          { label: "Unique users",   value: new Set(logs.map((e) => e.userId ?? "admin")).size },
-        ].map(({ label, value }) => (
-          <div key={label} className="bg-white px-4 py-4 md:flex-1 md:px-5 md:py-5">
-            <p className="text-2xl font-bold tabular-nums leading-none text-[#0a0a0a]">{value}</p>
-            <p className="text-[11px] text-[#999] mt-1.5 font-medium uppercase tracking-wide">{label}</p>
-          </div>
-        ))}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <StatCard label="Total entries" value={logs.length} icon={ScrollText} tone="bg-tint-slate text-ink-slate" />
+        <StatCard label="Today" value={logs.filter((e) => withinDateFilter(e.timestamp, "today")).length} icon={CalendarDays} tone="bg-tint-blue text-ink-blue" />
+        <StatCard label="This week" value={logs.filter((e) => withinDateFilter(e.timestamp, "7d")).length} icon={CalendarRange} tone="bg-tint-indigo text-ink-indigo" />
+        <StatCard label="People" value={new Set(logs.map((e) => e.userId ?? "admin")).size} icon={Users} tone="bg-tint-teal text-ink-teal" />
       </div>
 
       {/* Filters */}

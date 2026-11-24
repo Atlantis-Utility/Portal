@@ -57,13 +57,13 @@ function NavLink({
       aria-current={active ? "page" : undefined}
       className={`group relative flex items-center rounded-lg transition-colors ${
         collapsed ? "w-10 h-10 mx-auto justify-center" : "gap-2.5 px-2 py-1.5 w-full"
-      } ${active ? "bg-surface-3 text-fg" : "text-fg-muted hover:bg-surface-2 hover:text-fg"}`}
+      } ${active ? "bg-surface-3 text-fg font-semibold" : "text-fg font-medium hover:bg-surface-2"}`}
     >
       {/* Each area's own colour, softly: a tinted tile behind the icon. */}
       <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${tone.tile} ${active ? "ring-1 " + tone.ring : ""}`}>
         <Icon className="w-[15px] h-[15px]" />
       </span>
-      {!collapsed && <span className="text-[13px] font-medium leading-none whitespace-nowrap flex-1">{label}</span>}
+      {!collapsed && <span className="text-[13.5px] leading-none whitespace-nowrap flex-1">{label}</span>}
       {!collapsed && badge > 0 && (
         <span className="min-w-5 h-5 px-1.5 rounded-full bg-fg text-surface text-[10px] font-semibold flex items-center justify-center tabular-nums">
           {badge > 99 ? "99+" : badge}
@@ -129,7 +129,7 @@ export default function Sidebar({
           {visibleSections.map((section, i) => (
             <div key={section.label || i} className="pt-3">
               {!collapsed ? (
-                <p className="text-[10px] font-semibold text-fg-subtle uppercase tracking-[0.14em] px-2 mb-1.5">
+                <p className="text-[10px] font-semibold text-fg-muted uppercase tracking-[0.14em] px-2 mb-1.5">
                   {section.label}
                 </p>
               ) : (
@@ -158,7 +158,7 @@ export default function Sidebar({
           <NavLink href="/settings" label="Settings" active={isActive("/settings")} collapsed={collapsed} onClick={onMobileClose} />
           <button
             onClick={toggleTheme}
-            className={`group relative flex items-center rounded-lg transition-colors text-fg-muted hover:bg-surface-2 hover:text-fg ${
+            className={`group relative flex items-center rounded-lg transition-colors text-fg hover:bg-surface-2 ${
               collapsed ? "w-10 h-10 mx-auto justify-center" : "gap-2.5 px-2.5 py-2 w-full"
             }`}
           >

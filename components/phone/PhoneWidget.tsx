@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Phone, Grid3x3, Delete, X, RefreshCw, PhoneIncoming, PhoneOutgoing,
   PhoneMissed, Search, Users, Clock, Voicemail as VoicemailIcon, ChevronDown, ArrowRightLeft, Sparkles, Info, SquareParking,
@@ -455,6 +455,30 @@ export default function PhoneWidget() {
   // Who's parked, kept fresh while the phone is open and idle.
   usePolling(() => phone?.loadParks(), 10_000, Boolean(phone && phone.open && !phone.call && phone.status !== "off"));
 
+  // Clicking anywhere outside the phone (or pressing Escape) closes it, like
+  // any other popover. The corner button and the panel itself don't count;
+  // a call carries on regardless, and the green button brings it back.
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const isOpen = Boolean(phone?.open);
+  const setOpenRef = useRef(phone?.setOpen);
+  useEffect(() => { setOpenRef.current = phone?.setOpen; });
+  useEffect(() => {
+    if (!isOpen) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node | null;
+      if (!t || panelRef.current?.contains(t) || buttonRef.current?.contains(t)) return;
+      setOpenRef.current?.(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpenRef.current?.(false); };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [isOpen]);
+
   const recents = phone?.recents ?? null;
   const missedNew = useMemo(() => {
     if (!recents) return 0;
@@ -501,6 +525,7 @@ export default function PhoneWidget() {
       {/* The corner button. Pulses while a call is ringing. */}
       <button
         type="button"
+        ref={buttonRef}
         onClick={toggle}
         aria-label={open ? "Close phone" : "Open phone"}
         className={`fixed bottom-5 right-5 z-[250] h-13 rounded-full shadow-[0_8px_24px_-6px_rgba(0,0,0,0.35)] flex items-center justify-center gap-2 transition-all ${
@@ -515,7 +540,7 @@ export default function PhoneWidget() {
       </button>
 
       {open && (
-        <div className="fixed z-[250] bottom-22 right-5 left-5 sm:left-auto sm:w-[23rem] h-[min(40rem,calc(100vh-7.5rem))] bg-surface border border-line rounded-3xl shadow-[0_24px_64px_-12px_rgba(0,0,0,0.35)] overflow-hidden flex flex-col">
+        <div ref={panelRef} className="fixed z-[250] bottom-22 right-5 left-5 sm:left-auto sm:w-[23rem] h-[min(40rem,calc(100vh-7.5rem))] bg-surface border border-line rounded-3xl shadow-[0_24px_64px_-12px_rgba(0,0,0,0.35)] overflow-hidden flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-4 h-12 border-b border-line shrink-0">
             <div className="flex items-center gap-2 min-w-0">

@@ -71,7 +71,7 @@ export interface Area {
 export const AREAS: Area[] = [
   { href: "/",             accent: "indigo", icon: LayoutDashboard },
   { href: "/messages",     accent: "blue",   icon: MessageSquare },
-  { href: "/inbox",        accent: "blue",   icon: Inbox },
+  { href: "/inbox",        accent: "green",  icon: Inbox },
   { href: "/workflows",    accent: "violet", icon: Workflow },
   { href: "/contacts",     accent: "cyan",   icon: BookUser },
   { href: "/employees",    accent: "orange", icon: Users },

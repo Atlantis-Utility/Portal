@@ -573,6 +573,20 @@ export default function TaskDetailDrawer({ card, open, onClose, onUpdate, onDele
           )}
         </div>
 
+        {card.conversation && (
+          <a
+            href={`/messages?session=${encodeURIComponent(card.conversation.sessionId)}`}
+            className="flex items-center justify-between gap-3 rounded-xl border border-line bg-tint-blue px-4 py-3 hover:opacity-90"
+          >
+            <span className="min-w-0">
+              <span className="block text-[11px] font-semibold uppercase tracking-wider text-ink-blue">From a conversation</span>
+              <span className="block text-sm text-fg truncate">{card.conversation.name}{card.conversation.number ? ` · ${card.conversation.number}` : ""}</span>
+              <span className="block text-[11px] text-fg-muted">Its tags follow the conversation&apos;s.</span>
+            </span>
+            <span className="text-xs font-semibold text-ink-blue shrink-0">Open conversation →</span>
+          </a>
+        )}
+
         {/* Tags */}
         {card.tags.length > 0 && (
           <div>

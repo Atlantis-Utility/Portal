@@ -54,6 +54,12 @@ export interface KanbanCard {
    * doesn't immediately hide it from you.
    */
   createdBy?: string;
+  /**
+   * Set on a task that comes from tagging a conversation in Messages
+   * (lib/conversation-tasks.ts): which thread, so the card links back and
+   * the tags stay in step with it.
+   */
+  conversation?: { sessionId: string; name: string; number?: string };
 }
 
 interface Props {

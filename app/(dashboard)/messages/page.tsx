@@ -20,6 +20,7 @@ import Avatar from "@/components/messages/Avatar";
 import CallLink from "@/components/phone/CallLink";
 import AddTaskDrawer from "@/components/tasks/AddTaskDrawer";
 import { addTask } from "@/lib/db/tasks";
+import { syncConversationTask } from "@/lib/conversation-tasks";
 import ScheduledMessages, { type SchedulePrefill } from "@/components/messages/ScheduledMessages";
 import AccessSection from "@/components/messages/AccessSection";
 import { SCHEDULE_OPTION } from "@/lib/workflows/types";
@@ -1369,6 +1370,20 @@ export default function MessagesPage() {
       return false;
     }
     setAnnotations((prev) => ({ ...prev, [c.sessionId]: saved }));
+    // Tags put the conversation on the Tasks board (and take it off again).
+    if (patch.tags !== undefined) {
+      const number = c.isGroup ? "" : formatPhone(c.remote) || c.remote;
+      syncConversationTask(
+        { sessionId: c.sessionId, name: nameFor(c), number },
+        patch.tags,
+        { name: authUser?.displayName || authUser?.email || "", employeeId: authUser?.accessEmployeeId },
+      )
+        .then((r) => {
+          if (r === "created") toast.success("Added to Tasks.");
+          else if (r === "removed") toast.success("Taken off Tasks.");
+        })
+        .catch((e) => toast.error(`Tagged, but the task didn't update: ${e instanceof Error ? e.message : "try again"}`));
+    }
     return true;
   }
 

@@ -4,12 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Select from "@/components/ui/Select";
 import { TagChips } from "@/components/ui/TagPicker";
 import { MESSAGE_TAGS, TAG_BY_KEY } from "@/lib/message-tags";
+import Link from "next/link";
 import Header from "@/components/layout/Header";
 import AddTaskDrawer, { type KanbanCard, type KanbanColumn } from "@/components/tasks/AddTaskDrawer";
 import TaskDetailDrawer from "@/components/tasks/TaskDetailDrawer";
 import { subscribeTasks, addTask, updateTask, removeTask } from "@/lib/db/tasks";
 import { useAuth } from "@/lib/auth-context";
-import { Plus, Search, RefreshCw } from "lucide-react";
+import { Plus, Search, RefreshCw, MessageSquare } from "lucide-react";
 
 /**
  * The task board.
@@ -208,6 +209,15 @@ export default function TasksPage() {
                           <span className={`text-[10px] ${due.late ? "text-[#b91c1c] font-medium" : "text-[#999]"}`}>
                             {due.text}
                           </span>
+                          {card.conversation && (
+                            <Link
+                              href={`/messages?session=${encodeURIComponent(card.conversation.sessionId)}`}
+                              className="inline-flex items-center gap-1 text-[10px] font-medium text-ink-blue bg-tint-blue rounded px-1.5 py-0.5 hover:opacity-80"
+                              title={`Open the conversation with ${card.conversation.name}`}
+                            >
+                              <MessageSquare className="w-2.5 h-2.5" /> Conversation
+                            </Link>
+                          )}
                           {card.assignees.slice(0, 2).map((a) => (
                             <span key={a} className="text-[10px] text-[#666] bg-[#fafafa] rounded px-1.5 py-0.5">
                               {a}

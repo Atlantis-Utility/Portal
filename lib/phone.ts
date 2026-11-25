@@ -97,9 +97,61 @@ export async function phoneLogin(extension: string, displayName: string): Promis
   }
   const password = found["device-sip-registration-password"] ?? "";
   if (!password) throw new Error(`RingLogix didn't return a password for ${device}.`);
+  // So calls to the main line ring the portal too, not only the desk phone.
+  await joinRingGroups(extension).catch((e) => console.error(`[phone] couldn't add ${device} to the ring groups`, e));
   const login = { extension, device, domain, password, servers: phoneServers(), displayName };
   cache.set(extension, { login, until: Date.now() + 10 * 60_000 });
   return login;
+}
+
+interface QueueAgent {
+  "callqueue-agent-id"?: string;
+  "callqueue-agent-entry-type"?: string;
+  "callqueue-agent-availability-type"?: string;
+  "callqueue-agent-dispatch-queue-priority-ordinal"?: number;
+  "login-username"?: string;
+}
+
+/**
+ * Puts the portal device in every ring group the person's other phones are
+ * in, and returns the ones it joined.
+ *
+ * Ring groups here list exact devices ("sip:102@…", "sip:102m@…",
+ * "sip:102wp@…"), not the extension, so calls to the main numbers (auto
+ * attendant -> 500/502/503/556) rang every phone but the portal's (seen
+ * 2026-11-24). An extension's own answering rule rings "<OwnDevices>", so
+ * direct calls never needed this. A group none of the person's phones
+ * answer in is left alone, and nothing is ever removed: a device that
+ * isn't registered (portal closed) simply isn't rung.
+ */
+export async function joinRingGroups(extension: string): Promise<string[]> {
+  const domain = ourDomain();
+  const d = encodeURIComponent(domain);
+  const me = `sip:${portalDevice(extension)}@${domain}`;
+  const { status, data } = await coreApi("GET", `/domains/${d}/callqueues`);
+  if (status !== 200 || !Array.isArray(data)) return [];
+  const queues = (data as Array<{ callqueue?: string }>).map((q) => String(q.callqueue ?? "")).filter(Boolean);
+  const joined = await Promise.all(queues.map(async (q) => {
+    const r = await coreApi("GET", `/domains/${d}/callqueues/${encodeURIComponent(q)}/agents`);
+    if (r.status !== 200 || !Array.isArray(r.data)) return null;
+    const agents = r.data as QueueAgent[];
+    if (agents.some((a) => a["callqueue-agent-id"] === me)) return null;
+    const ownPhone = agents.find((a) =>
+      a["callqueue-agent-entry-type"] === "device" &&
+      a["login-username"] === `${extension}@${domain}` &&
+      a["callqueue-agent-availability-type"] !== "disabled");
+    if (!ownPhone) return null;
+    const add = await coreApi("POST", `/domains/${d}/callqueues/${encodeURIComponent(q)}/agents`, {
+      "callqueue-agent-id": me,
+      "callqueue-agent-availability-type": ownPhone["callqueue-agent-availability-type"] ?? "automatic",
+      "callqueue-agent-dispatch-queue-priority-ordinal": ownPhone["callqueue-agent-dispatch-queue-priority-ordinal"] ?? 1,
+      "limits-max-active-calls-total": 1,
+    });
+    if (add.status >= 300) throw new Error(`ring group ${q} answered ${add.status}: ${JSON.stringify(add.data).slice(0, 200)}`);
+    console.log(`[phone] added ${me} to ring group ${q}`);
+    return q;
+  }));
+  return joined.filter((q): q is string => !!q);
 }
 
 export interface ParkSpot {

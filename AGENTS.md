@@ -92,6 +92,13 @@ with **Reseller** scope, plus a separate API application. Hard-won facts:
   one and RingLogix picks the password. **Those v2 device paths answer 404
   unless the URL has a query string** (same URL plus `?x=1` → 200; verified
   2026-11-24), so `coreApi` always adds one.
+- **Ring groups list devices, not extensions.** The main numbers go to the
+  auto attendant and on to call queues (500, 502, 503, 556…) whose agents
+  are exact devices (`sip:102m@277215`), so a new device isn't rung by them.
+  `joinRingGroups` (run at phone login) adds `<ext>pt` to every queue the
+  person's other phones are in; v2 `POST /domains/{d}/callqueues/{q}/agents`
+  with `callqueue-agent-id: "sip:<device>@<domain>"` answers 202. Direct calls
+  to an extension ring `<OwnDevices>` and never needed it. Verified 2026-11-24.
 - **JsSIP can't parse our numeric domain** (`sip:102pt@277215`): its grammar
   wants a host that starts with a letter, refuses the URI in config, and
   silently drops every reply carrying it. `lib/phone/sip-client.ts` patches
